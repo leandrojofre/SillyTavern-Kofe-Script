@@ -135,7 +135,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     name: 'getentryuid',
     callback: async (args) => {
         if (!checkStrings([args.file, args.field, args.value], ["File", "Field", "Value"]))
-            return "0";
+            return "-1";
 
         return await getEntryUid(args, String(args.value));
     },
