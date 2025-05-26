@@ -109,12 +109,12 @@ async function getEntryUid(args, value) {
 
     const entries = await getEntriesFromFile(file);
 
-    if (!entries) return "-1";
+    if (!entries) return "";
 
     if (newWorldInfoEntryTemplate[field] === undefined) {
         // @ts-ignore
         if (extensionSettings.show_warnings) toastr.warning(t`Valid field name is required`);
-        return "-1";
+        return "";
     }
 
     const macroedValue = substituteParams(value);
@@ -123,7 +123,7 @@ async function getEntryUid(args, value) {
     if (!target) {
         // @ts-ignore
         if (extensionSettings.show_warnings) toastr.warning(t`No match found`);
-        return "-1";
+        return "";
     }
 
     const uid = target.uid;
@@ -135,7 +135,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     name: 'getentryuid',
     callback: async (args) => {
         if (!checkStrings([args.file, args.field, args.value], ["File", "Field", "Value"]))
-            return "-1";
+            return "";
 
         return await getEntryUid(args, String(args.value));
     },
