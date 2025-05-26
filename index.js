@@ -170,7 +170,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
             <strong>Example:</strong>
             <ul>
                 <li>
-                    <pre><code>/getentryuid file=chatLore field=comment title 1</code></pre>
+                    <pre><code>/getentryuid file=chatLore field=comment value="title 1"</code></pre>
                 </li>
             </ul>
         </div>
