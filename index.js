@@ -1,6 +1,13 @@
 import {extension_settings} from "../../../extensions.js";
-import {saveSettingsDebounced, event_types, eventSource} from "../../../../script.js";
-import {getLocalVariable, getGlobalVariable} from "../../../variables.js";
+import {saveSettingsDebounced/*, event_types, eventSource*/, substituteParams} from "../../../../script.js";
+// import {getLocalVariable, getGlobalVariable} from "../../../variables.js";
+import { SlashCommandParser } from "../../../slash-commands/SlashCommandParser.js";
+import { SlashCommand } from "../../../slash-commands/SlashCommand.js";
+import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from "../../../slash-commands/SlashCommandArgument.js";
+import { commonEnumProviders, enumIcons } from "../../../slash-commands/SlashCommandCommonEnumsProvider.js";
+import { loadWorldInfo, newWorldInfoEntryDefinition, newWorldInfoEntryTemplate, world_names } from "../../../world-info.js";
+import { enumTypes, SlashCommandEnumValue } from "../../../slash-commands/SlashCommandEnumValue.js";
+import { t } from "../../../i18n.js";
 
 // * Extension variables
 
@@ -9,10 +16,22 @@ const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 const extensionSettings = extension_settings[extensionName];
 const defaultSettings = {
     enabled: true,
+    show_warnings: true,
     debug: false
 };
 
 const context = SillyTavern.getContext();
+const localEnumProviders = {
+    /** All possible fields that can be set in a WI entry */
+    wiEntryFields: () => Object.entries(newWorldInfoEntryDefinition).map(([key, value]) =>
+        new SlashCommandEnumValue(
+            key,
+            `[${value.type}] default: ${(typeof value.default === 'string' ? `'${value.default}'` : value.default)}`,
+            enumTypes.enum,
+            enumIcons.getDataTypeIcon(value.type)
+        )
+    )
+}
 
 // * Debugs methods
 
@@ -23,7 +42,126 @@ const log = (...msg) => {
 
 // * Extension methods
 
-// ...
+function checkStrings(params, names=[]) {
+    let valid = true;
+
+    for (let i = 0; i < params.length; i++) {
+        const string = params[i];
+        const name = names[i] ?? "An argument";
+
+        // @ts-ignore
+        if (!String(string).trim() || !string) {
+
+            // @ts-ignore
+            if (extensionSettings.show_warnings) toastr.warning(t`${name} is empty`);
+
+            valid = false;
+            break;
+        }
+    }
+
+    return valid;
+}
+
+async function getEntriesFromFile(file) {
+    if (!file || !world_names.includes(file)) {
+        // @ts-ignore
+        if (extensionSettings.show_warnings) toastr.warning(t`Valid World Info file name is required`);
+        return '';
+    }
+
+    const data = await loadWorldInfo(file);
+
+    if (!data || !('entries' in data)) {
+        // @ts-ignore
+        if (extensionSettings.show_warnings) toastr.warning(t`World Info file has an invalid format`);
+        return '';
+    }
+
+    const entries = Object.values(data.entries);
+
+    if (!entries || entries.length === 0) {
+        // @ts-ignore
+        if (extensionSettings.show_warnings) toastr.warning(t`World Info file has no entries`);
+        return '';
+    }
+
+    return entries;
+}
+
+async function getEntryUid(args, value) {
+    const file = args.file;
+    const field = args.field;
+
+    const entries = await getEntriesFromFile(file);
+
+    if (!entries) return "0";
+
+    if (newWorldInfoEntryTemplate[field] === undefined) {
+        // @ts-ignore
+        if (extensionSettings.show_warnings) toastr.warning(t`Valid field name is required`);
+        return "0";
+    }
+
+    const macroedValue = substituteParams(value);
+    const target = entries.find(entry => substituteParams(String(entry[field])) === macroedValue);
+
+    if (!target) {
+        // @ts-ignore
+        if (extensionSettings.show_warnings) toastr.warning(t`No match found`);
+        return "0";
+    }
+
+    const uid = target.uid;
+
+    return String(uid);
+}
+
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+    name: 'getentryuid',
+    callback: async (args) => {
+        if (!checkStrings([args.file, args.field, args.value], ["File", "Field", "Value"]))
+            return "0";
+
+        return await getEntryUid(args, String(args.value));
+    },
+    returns: 'entry uid',
+    namedArgumentList: [
+        SlashCommandNamedArgument.fromProps({
+            name: 'file',
+            description: 'book name',
+            typeList: [ARGUMENT_TYPE.STRING],
+            isRequired: true,
+            enumProvider: commonEnumProviders.worlds
+        }),
+        SlashCommandNamedArgument.fromProps({
+            name: 'field',
+            description: 'field to match (ie: comment)',
+            typeList: [ARGUMENT_TYPE.STRING],
+            isRequired: true,
+            enumList: localEnumProviders.wiEntryFields()
+        }),
+        SlashCommandNamedArgument.fromProps({
+            name: 'value',
+            description: 'value to match against field, case sensitive (empty or invalid will return uid=0) ie: cooking 101',
+            typeList: [ARGUMENT_TYPE.STRING],
+            isRequired: true
+        })
+    ],
+    helpString: `
+        <div>
+            Get an entry uid by pairing a World Info field and a value and returning the uid of the first match.
+        </div>
+        <div>
+            <strong>Example:</strong>
+            <ul>
+                <li>
+                    <pre><code>/getentryuid file=chatLore field=comment title 1</code></pre>
+                </li>
+            </ul>
+        </div>
+    `
+}));
 
 // * Methods in charge of controlling the extension settings
 
@@ -64,6 +202,7 @@ async function loadHTMLSettings() {
 
     // Event Listeners for the extension HTML
     $("#kofe-script-activate-extension").on("input", settingsBooleanButton);
+    $("#kofe-script-show-warnings").on("input", settingsBooleanButton);
     $("#kofe-script-activate-debug").on("input", settingsBooleanButton);
     $("#kofe-script-check-configuration").on("click", displaySettings);
 
@@ -73,6 +212,7 @@ async function loadHTMLSettings() {
 /** Init setting values on the menu */
 function setSettings() {
     $("#kofe-script-activate-extension").prop("checked", extensionSettings.enabled).trigger("input");
+    $("#kofe-script-show-warnings").prop("checked", extensionSettings.show_warnings).trigger("input");
     $("#kofe-script-activate-debug").prop("checked", extensionSettings.debug).trigger("input");
 
     log("setSettings", extensionSettings);
