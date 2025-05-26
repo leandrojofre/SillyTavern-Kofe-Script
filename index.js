@@ -109,12 +109,12 @@ async function getEntryUid(args, value) {
 
     const entries = await getEntriesFromFile(file);
 
-    if (!entries) return "0";
+    if (!entries) return "-1";
 
     if (newWorldInfoEntryTemplate[field] === undefined) {
         // @ts-ignore
         if (extensionSettings.show_warnings) toastr.warning(t`Valid field name is required`);
-        return "0";
+        return "-1";
     }
 
     const macroedValue = substituteParams(value);
@@ -123,7 +123,7 @@ async function getEntryUid(args, value) {
     if (!target) {
         // @ts-ignore
         if (extensionSettings.show_warnings) toastr.warning(t`No match found`);
-        return "0";
+        return "-1";
     }
 
     const uid = target.uid;
@@ -164,7 +164,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     ],
     helpString: `
         <div>
-            Get an entry uid by pairing a World Info field and a value and returning the uid of the first match.
+            Get an entry uid by pairing a World Info field and a value, returning the uid of the first match. If no match is found, the non-valid UID value -1 is returned.
         </div>
         <div>
             <strong>Example:</strong>
