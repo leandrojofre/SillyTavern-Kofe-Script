@@ -1,11 +1,11 @@
 {
-    "display_name": "EXTENSION_NAME",
+    "display_name": "SillyTavern-Kofe-Script",
     "loading_order": 200,
     "requires": [],
     "optional": [],
     "js": "index.js",
     "css": "style.css",
-    "author": "AUTHOR_NAME",
+    "author": "Leandro Jofre",
     "version": "0.0.0",
     "homePage": "https://github.com/leandrojofre/SillyTavern-Extension-Template.git",
     "auto_update": true

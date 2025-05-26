@@ -1,14 +1,8 @@
-# SillyTavern - EXTENSION_NAME
-This is a simple extension that adds... that allows you to...
+# SillyTavern - Kofe Script
+This is a simple extension that adds a bunch of random commands needed by me for random reasons.
 ## Features
-- It will...
-### Coming Soon
-- ...
+- `/getentryuid file= field= value=` Returns the uid of the first entry that matches the value in the selected field.
 ## Installation
-Install the extension using this link: ```https://github.com/leandrojofre/SillyTavern-Extension-Template.git```
+Install the extension using this link: ```https://github.com/leandrojofre/SillyTavern-Kofe-Script.git```
 ### Usage
-This extension is intended to be used...
-### Compatibility
-Tested: The extension supports...
-## Support and Contributions
-- Thanks to...
+This extension is requires Quick Replies to be enabled in ST's extension settings, inside `manage extensions`.
