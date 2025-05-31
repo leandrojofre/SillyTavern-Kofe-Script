@@ -162,7 +162,7 @@ async function getEntryUid(args, value) {
     return String(uid);
 }
 
-/** Get the raw, un-macro-unparsed content of an entry field
+/** Get the raw, un-macro-parsed content of an entry field
     @param {Object} args - Lorebook name and entry field to match
     @param {String} uid - UID of the target entry
     @returns {Promise<String>} Raw text content of the field found from the lorebook
