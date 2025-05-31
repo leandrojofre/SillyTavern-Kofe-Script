@@ -1,13 +1,14 @@
 import {extension_settings} from "../../../extensions.js";
-import {saveSettingsDebounced/*, event_types, eventSource*/, substituteParams} from "../../../../script.js";
-// import {getLocalVariable, getGlobalVariable} from "../../../variables.js";
+import {saveSettingsDebounced, substituteParams} from "../../../../script.js";
 import { SlashCommandParser } from "../../../slash-commands/SlashCommandParser.js";
 import { SlashCommand } from "../../../slash-commands/SlashCommand.js";
 import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from "../../../slash-commands/SlashCommandArgument.js";
 import { commonEnumProviders, enumIcons } from "../../../slash-commands/SlashCommandCommonEnumsProvider.js";
-import { loadWorldInfo, newWorldInfoEntryDefinition, newWorldInfoEntryTemplate, world_names } from "../../../world-info.js";
+import { loadWorldInfo, newWorldInfoEntryDefinition, newWorldInfoEntryTemplate, world_info_logic, world_info_position, world_names, worldInfoCache } from "../../../world-info.js";
 import { enumTypes, SlashCommandEnumValue } from "../../../slash-commands/SlashCommandEnumValue.js";
 import { t } from "../../../i18n.js";
+import { SlashCommandClosure } from "../../../slash-commands/SlashCommandClosure.js";
+import { SlashCommandExecutor } from "../../../slash-commands/SlashCommandExecutor.js";
 
 // * Extension variables
 
@@ -30,7 +31,20 @@ const localEnumProviders = {
             enumTypes.enum,
             enumIcons.getDataTypeIcon(value.type)
         )
-    )
+    ),
+
+    /** All existing UIDs based on the file argument as world name */
+    wiUids: (/** @type {SlashCommandExecutor} */ executor) => {
+        const file = executor.namedArgumentList.find(it => it.name == 'file')?.value;
+        if (file instanceof SlashCommandClosure) throw new Error('Argument \'file\' does not support closures');
+        // Try find world from cache
+        if (!worldInfoCache.has(file)) return [];
+        const world = worldInfoCache.get(file);
+        if (!world) return [];
+        return Object.entries(world.entries).map(([uid, data]) =>
+            new SlashCommandEnumValue(uid, `${data.comment ? `${data.comment}: ` : ''}${data.key.join(', ')}${data.keysecondary?.length ? ` [${Object.entries(world_info_logic).find(([_, value]) => value == data.selectiveLogic)[0]}] ${data.keysecondary.join(', ')}` : ''} [${getWiPositionString(data)}]`,
+                enumTypes.enum, enumIcons.getWiStatusIcon(data)));
+    },
 }
 
 // * Debugs methods
@@ -41,6 +55,19 @@ const log = (...msg) => {
 };
 
 // * Extension methods
+
+function getWiPositionString(entry) {
+    switch (entry.position) {
+        case world_info_position.before: return '↑Char';
+        case world_info_position.after: return '↓Char';
+        case world_info_position.EMTop: return '↑EM';
+        case world_info_position.EMBottom: return '↓EM';
+        case world_info_position.ANTop: return '↑AT';
+        case world_info_position.ANBottom: return '↓AT';
+        case world_info_position.atDepth: return `@D${enumIcons.getRoleIcon(entry.role)}`;
+        default: return '<Unknown>';
+    }
+}
 
 /** Determines if params are valid strings
     @param {Array} params - An Array of strings
@@ -53,6 +80,10 @@ function checkStrings(params, names=[]) {
     for (let i = 0; i < params.length; i++) {
         const string = params[i];
         const name = names[i] ?? "An argument";
+
+        if (!isNaN(Number(string))) {
+            continue;
+        }
 
         // @ts-ignore
         if (!String(string).trim() || !string) {
@@ -99,7 +130,7 @@ async function getEntriesFromFile(file) {
 }
 
 /** Get the UID of world info entry
-    @param {Object} args -  Lorebook name and entry field to match
+    @param {Object} args - Lorebook name and entry field to match
     @param {String} value - Value to match against args
     @returns {Promise<String>} UID of the found lorebook entry
 */
@@ -129,6 +160,48 @@ async function getEntryUid(args, value) {
     const uid = target.uid;
 
     return String(uid);
+}
+
+/** Get the raw, un-macro-parsed content of an entry field
+    @param {Object} args - Lorebook name and entry field to match
+    @param {String} uid - UID of the target entry
+    @returns {Promise<String>} Raw text content of the field found from the lorebook
+*/
+async function getRawEntryField(args, uid) {
+    const file = args.file;
+    const field = args.field || 'content';
+
+    const entries = await getEntriesFromFile(file);
+
+    if (!entries) {
+        return "";
+    }
+
+    const entry = entries.find(x => String(x.uid) === String(uid));
+
+    if (!entry) {
+        // @ts-ignore
+        if (extensionSettings.show_warnings) toastr.warning('Valid UID is required');
+        return "";
+    }
+
+    if (newWorldInfoEntryTemplate[field] === undefined) {
+        // @ts-ignore
+        if (extensionSettings.show_warnings) toastr.warning('Valid field name is required');
+        return "";
+    }
+
+    const fieldValue = entry[field];
+
+    if (fieldValue === undefined) {
+        return "";
+    }
+
+    if (Array.isArray(fieldValue)) {
+        return JSON.stringify(fieldValue);
+    }
+
+    return String(fieldValue);
 }
 
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({
@@ -175,6 +248,55 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
             </ul>
         </div>
     `
+}));
+
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+    name: 'getrawentryfield',
+    aliases: ['getlorefield', 'getwifield'],
+    callback: async (args, uid) => {
+        if (!checkStrings([args.file, args.field, uid], ["File", "Field", "UID"]))
+            return "";
+
+        return await getRawEntryField(args, String(uid));
+    },
+    returns: 'field value',
+    namedArgumentList: [
+        SlashCommandNamedArgument.fromProps({
+            name: 'file',
+            description: 'book name',
+            typeList: [ARGUMENT_TYPE.STRING],
+            isRequired: true,
+            enumProvider: commonEnumProviders.worlds,
+        }),
+        SlashCommandNamedArgument.fromProps({
+            name: 'field',
+            description: 'field to retrieve (default: content)',
+            typeList: [ARGUMENT_TYPE.STRING],
+            defaultValue: 'content',
+            enumList: localEnumProviders.wiEntryFields(),
+        }),
+    ],
+    unnamedArgumentList: [
+        SlashCommandArgument.fromProps({
+            description: 'record UID',
+            typeList: [ARGUMENT_TYPE.STRING],
+            isRequired: true,
+            enumProvider: localEnumProviders.wiUids,
+        }),
+    ],
+    helpString: `
+        <div>
+            Get a raw field value (default: content - no macros replaced) of the record with the UID from the specified book and pass it down the pipe.
+        </div>
+        <div>
+            <strong>Example:</strong>
+            <ul>
+                <li>
+                    <pre><code>/getrawentryfield file=chatLore field=content 123</code></pre>
+                </li>
+            </ul>
+        </div>
+    `,
 }));
 
 // * Methods in charge of controlling the extension settings
