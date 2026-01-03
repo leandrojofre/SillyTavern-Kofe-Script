@@ -1,16 +1,25 @@
-import {extension_settings} from "../../../extensions.js";
-import {saveSettingsDebounced, substituteParams} from "../../../../script.js";
-import { SlashCommandParser } from "../../../slash-commands/SlashCommandParser.js";
-import { SlashCommand } from "../../../slash-commands/SlashCommand.js";
-import { ARGUMENT_TYPE, SlashCommandArgument, SlashCommandNamedArgument } from "../../../slash-commands/SlashCommandArgument.js";
 import { commonEnumProviders, enumIcons } from "../../../slash-commands/SlashCommandCommonEnumsProvider.js";
-import { loadWorldInfo, newWorldInfoEntryDefinition, newWorldInfoEntryTemplate, world_info_logic, world_info_position, world_names, worldInfoCache } from "../../../world-info.js";
+import { newWorldInfoEntryDefinition, newWorldInfoEntryTemplate, world_info_logic, world_info_position, world_names, worldInfoCache } from "../../../world-info.js";
 import { enumTypes, SlashCommandEnumValue } from "../../../slash-commands/SlashCommandEnumValue.js";
-import { t } from "../../../i18n.js";
 import { SlashCommandClosure } from "../../../slash-commands/SlashCommandClosure.js";
 import { SlashCommandExecutor } from "../../../slash-commands/SlashCommandExecutor.js";
 
-// * Extension variables
+// * MARK:Extension variables
+
+const context = () => SillyTavern.getContext();
+
+const {
+    saveSettingsDebounced,
+    extensionSettings: extension_settings,
+    loadWorldInfo,
+    ARGUMENT_TYPE,
+    SlashCommandArgument,
+    SlashCommandNamedArgument,
+    SlashCommand,
+    SlashCommandParser,
+    substituteParams,
+    t,
+} = context();
 
 const extensionName = "SillyTavern-Kofe-Script";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
@@ -21,7 +30,6 @@ const defaultSettings = {
     debug: false
 };
 
-const context = SillyTavern.getContext();
 const localEnumProviders = {
     /** All possible fields that can be set in a WI entry */
     wiEntryFields: () => Object.entries(newWorldInfoEntryDefinition).map(([key, value]) =>
@@ -47,14 +55,14 @@ const localEnumProviders = {
     },
 }
 
-// * Debugs methods
+// * MARK:Debugs methods
 
 const log = (...msg) => {
     if (!extensionSettings.enabled || !extensionSettings.debug) return;
     console.log("[" + extensionName + "]", ...msg);
 };
 
-// * Extension methods
+// * MARK:Extension methods
 
 function getWiPositionString(entry) {
     switch (entry.position) {
@@ -298,7 +306,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     `,
 }));
 
-// * Methods in charge of controlling the extension settings
+// * MARK:Methods in charge of controlling the extension settings
 
 const settingsCallbacks = {
     /**	Triggers on enabled setting change. */
@@ -353,20 +361,20 @@ function setSettings() {
     log("setSettings", extensionSettings);
 }
 
-// * Initialize Extension
+// * MARK:Initialize Extension
 
-(async function initExtension() {
+$(async function () {
 
-    if (!context.extensionSettings[extensionName]) {
-        context.extensionSettings[extensionName] = structuredClone(defaultSettings);
+    if (!context().extensionSettings[extensionName]) {
+        context().extensionSettings[extensionName] = structuredClone(defaultSettings);
     }
 
     for (const key of Object.keys(defaultSettings)) {
-        if (context.extensionSettings[extensionName][key] === undefined) {
-            context.extensionSettings[extensionName][key] = defaultSettings[key];
+        if (context().extensionSettings[extensionName][key] === undefined) {
+            context().extensionSettings[extensionName][key] = defaultSettings[key];
         }
     }
 
     await loadHTMLSettings();
     setSettings();
-})();
+});
