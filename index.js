@@ -3,6 +3,7 @@ import { newWorldInfoEntryDefinition, newWorldInfoEntryTemplate, world_info_logi
 import { enumTypes, SlashCommandEnumValue } from "../../../slash-commands/SlashCommandEnumValue.js";
 import { SlashCommandClosure } from "../../../slash-commands/SlashCommandClosure.js";
 import { SlashCommandExecutor } from "../../../slash-commands/SlashCommandExecutor.js";
+import {MacroValueType} from "../../../macros/macro-system.js";
 
 // * MARK:Extension variables
 
@@ -18,8 +19,22 @@ const {
     SlashCommand,
     SlashCommandParser,
     substituteParams,
+    variables,
     t,
 } = context();
+
+const {
+    local: localVaraibles,
+    global: globalVariables
+} = variables;
+
+const {
+    get: getLocalVariable
+} = localVaraibles;
+
+const {
+    get: getGlobalVariable
+} = globalVariables;
 
 const extensionName = "SillyTavern-Kofe-Script";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
@@ -27,6 +42,7 @@ const extensionSettings = extension_settings[extensionName];
 const defaultSettings = {
     enabled: true,
     show_warnings: true,
+    experimental_macro_engine: false,
     debug: false
 };
 
@@ -54,6 +70,8 @@ const localEnumProviders = {
                 enumTypes.enum, enumIcons.getWiStatusIcon(data)));
     },
 }
+
+let macroRegistered = false;
 
 // * MARK:Debugs methods
 
@@ -306,14 +324,57 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     `,
 }));
 
-// * MARK:Methods in charge of controlling the extension settings
+function registerMacros() {
+    if (!extensionSettings.enabled || !extensionSettings.experimental_macro_engine) return;
+
+    log("registerMacros: Macros 2.0 experimental engine is enabled");
+
+    macroRegistered = true;
+
+    const { macros } = context();
+
+    macros.register('sortText', {
+        category: macros.category.UTILITY,
+        returnType: MacroValueType.STRING,
+        description: 'It breaks the input text into lines, sorts them alphabetically, and then joins them back together.',
+        unnamedArgs: [{
+            name: 'text',
+            type: MacroValueType.STRING,
+            description: 'The text to sort.',
+        }, {
+            name: 'textDelimiter',
+            type: MacroValueType.STRING,
+            description: 'The delimiter used to split lines (default: \\n).',
+            optional: true,
+            defaultValue: '\n'
+        }],
+        handler: function ({args}) {
+            const text = args[0];
+            const delimiter = args[1] || '\n';
+            const textLines = text.split(delimiter);
+            textLines.sort((a, b) => a.localeCompare(b));
+
+            return textLines.join(delimiter);
+        }
+    });
+}
+
+// * MARK:Settings Controls
 
 const settingsCallbacks = {
     /**	Triggers on enabled setting change. */
     enabled: () => {
         // Nothing by the moment
+    },
+
+    experimental_macro_engine: () => {
+        if (extensionSettings.experimental_macro_engine && !macroRegistered)
+            toastr.warning(t`Refresh the tab to use the new engine`);
+
+        if (!extensionSettings.experimental_macro_engine && macroRegistered)
+            toastr.warning(t`Refresh the tab to disable the experimental engine`);
     }
-}
+};
 
 /** Changes a setting value and triggers a callback if there's any on settingsCallbacks. */
 function settingsBooleanButton(event) {
@@ -346,6 +407,7 @@ async function loadHTMLSettings() {
     // Event Listeners for the extension HTML
     $("#kofe-script-activate-extension").on("input", settingsBooleanButton);
     $("#kofe-script-show-warnings").on("input", settingsBooleanButton);
+    $("#kofe-script-experimetal-macro-engine").on("input", settingsBooleanButton);
     $("#kofe-script-activate-debug").on("input", settingsBooleanButton);
     $("#kofe-script-check-configuration").on("click", displaySettings);
 
@@ -353,12 +415,13 @@ async function loadHTMLSettings() {
 }
 
 /** Init setting values on the menu */
-function setSettings() {
+function setSettingsMenu() {
     $("#kofe-script-activate-extension").prop("checked", extensionSettings.enabled).trigger("input");
     $("#kofe-script-show-warnings").prop("checked", extensionSettings.show_warnings).trigger("input");
+    $("#kofe-script-experimetal-macro-engine").prop("checked", extensionSettings.experimental_macro_engine).trigger("input");
     $("#kofe-script-activate-debug").prop("checked", extensionSettings.debug).trigger("input");
 
-    log("setSettings", extensionSettings);
+    log("setSettingsMenu", extensionSettings);
 }
 
 // * MARK:Initialize Extension
@@ -376,5 +439,6 @@ $(async function () {
     }
 
     await loadHTMLSettings();
-    setSettings();
+    registerMacros();
+    setSettingsMenu();
 });
