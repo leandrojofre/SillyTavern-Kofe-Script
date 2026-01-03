@@ -3,7 +3,9 @@ import { newWorldInfoEntryDefinition, newWorldInfoEntryTemplate, world_info_logi
 import { enumTypes, SlashCommandEnumValue } from "../../../slash-commands/SlashCommandEnumValue.js";
 import { SlashCommandClosure } from "../../../slash-commands/SlashCommandClosure.js";
 import { SlashCommandExecutor } from "../../../slash-commands/SlashCommandExecutor.js";
-import {MacroValueType} from "../../../macros/macro-system.js";
+import { MacroValueType } from "../../../macros/macro-system.js";
+
+import { natsort } from "./public/bundle.min.js";
 
 // * MARK:Extension variables
 
@@ -349,10 +351,11 @@ function registerMacros() {
             defaultValue: '\n'
         }],
         handler: function ({args}) {
+            const sorter = natsort();
             const text = args[0];
             const delimiter = args[1] || '\n';
             const textLines = text.split(delimiter);
-            textLines.sort((a, b) => a.localeCompare(b));
+            textLines.sort((a,b) => sorter(a,b));
 
             return textLines.join(delimiter);
         }
