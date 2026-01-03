@@ -223,21 +223,21 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         }),
         SlashCommandNamedArgument.fromProps({
             name: 'field',
-            description: 'field to match (ie: comment)',
+            description: 'field to match',
             typeList: [ARGUMENT_TYPE.STRING],
             isRequired: true,
             enumList: localEnumProviders.wiEntryFields()
         }),
         SlashCommandNamedArgument.fromProps({
             name: 'value',
-            description: 'value to match against field, case sensitive (empty or invalid will return uid=0) ie: cooking 101',
+            description: 'value to match against field - case sensitive',
             typeList: [ARGUMENT_TYPE.STRING],
             isRequired: true
         })
     ],
     helpString: `
         <div>
-            Get an entry uid by pairing a World Info field and a value, returning the uid of the first match. If no match is found, the non-valid UID value -1 is returned.
+            Get an entry uid by pairing a World Info field and a value, returning the uid of the first match. If no match is found, an empty string is returned.
         </div>
         <div>
             <strong>Example:</strong>
@@ -252,7 +252,6 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
 
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     name: 'getrawentryfield',
-    aliases: ['getlorefield', 'getwifield'],
     callback: async (args, uid) => {
         if (!checkStrings([args.file, args.field, uid], ["File", "Field", "UID"]))
             return "";
