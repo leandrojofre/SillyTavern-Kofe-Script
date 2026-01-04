@@ -335,7 +335,7 @@ function registerMacros() {
 
     const { macros } = context();
 
-    macros.register('sortText', {
+    macros.register('sorttext', {
         category: macros.category.UTILITY,
         returnType: MacroValueType.STRING,
         description: 'It breaks the input text into lines, sorts them alphabetically, and then joins them back together.',
@@ -344,11 +344,11 @@ function registerMacros() {
             type: MacroValueType.STRING,
             description: 'The text to sort.',
         }, {
-            name: 'textDelimiter',
+            name: 'textdelimiter',
             type: MacroValueType.STRING,
             description: 'The delimiter used to split lines (default: \\n).',
             optional: true,
-            defaultValue: '\n'
+            defaultValue: '\\n'
         }],
         handler: function ({args}) {
             const sorter = natsort();
