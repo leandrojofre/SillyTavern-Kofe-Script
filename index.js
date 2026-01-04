@@ -44,7 +44,10 @@ const extensionSettings = extension_settings[extensionName];
 const defaultSettings = {
     enabled: true,
     show_warnings: true,
-    experimental_macro_engine: false,
+    macros: {
+        experimental_macro_engine: false,
+        collapse_multiple_newlines: false
+    },
     debug: false
 };
 
@@ -337,8 +340,12 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     `,
 }));
 
+function escapeRegExp(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function registerMacros() {
-    if (!extensionSettings.enabled || !extensionSettings.experimental_macro_engine) return;
+    if (!extensionSettings.enabled || !extensionSettings.macros.experimental_macro_engine) return;
 
     log("registerMacros: Macros 2.0 experimental engine is enabled");
 
@@ -357,23 +364,37 @@ function registerMacros() {
         }, {
             name: 'textdelimiter',
             type: MacroValueType.STRING,
-            description: 'The delimiter used to split lines (default: \\n).',
+            description: 'The delimiter used to split lines.',
+        }, {
+            name: 'separator',
+            type: MacroValueType.STRING,
+            description: 'Custom separator to use when joining the sorted lines (default: \\n).',
             optional: true,
-            defaultValue: '\\n'
+            defaultValue: '\\n',
         }],
         handler: function ({args}) {
             const sorter = natsort();
             const text = args[0];
-            const delimiter = args[1] || '\n';
+
+            const delimiter = args[1];
             const parsedDelimiter = un_escapeNewlines(delimiter);
-            const textLines = text.split(parsedDelimiter);
+
+            const separator = args[2] || '\n';
+            const parsedSeparator = un_escapeNewlines(separator);
+
+            const delimEsc = escapeRegExp(parsedDelimiter);
+            const regex = new RegExp(`[\\s\\S]*?${delimEsc}|[\\s\\S]+$`, 'g');
+            const textLines = text.match(regex) || [];
 
             textLines.sort((a,b) => sorter(a,b));
 
-            log("sorttext macro:", {text, parsedDelimiter, textLines});
-            log(args);
+            log("sorttext macro:", {text, parsedDelimiter, parsedSeparator, delimEsc, regex, textLines});
 
-            return textLines.join(parsedDelimiter);
+            const joined = textLines.join(parsedSeparator)
+
+            if (extensionSettings.macros.collapse_multiple_newlines)
+                return joined.replaceAll(/(\r?\n){2,}/g, '\n');
+            else return joined;
         }
     });
 }
@@ -387,10 +408,10 @@ const settingsCallbacks = {
     },
 
     experimental_macro_engine: () => {
-        if (extensionSettings.experimental_macro_engine && !macroRegistered)
+        if (extensionSettings.macros.experimental_macro_engine && !macroRegistered)
             toastr.warning(t`Refresh the tab to use the new engine`);
 
-        if (!extensionSettings.experimental_macro_engine && macroRegistered)
+        if (!extensionSettings.macros.experimental_macro_engine && macroRegistered)
             toastr.warning(t`Refresh the tab to disable the experimental engine`);
     }
 };
@@ -400,9 +421,16 @@ function settingsBooleanButton(event) {
     const target = event.target;
     const value = Boolean($(target).prop("checked"));
     const setting = target.getAttribute("kofe-script-setting");
-    const callback = settingsCallbacks[setting];
 
-    extensionSettings[setting] = value;
+    const hasPrefix = setting.split("/").length > 1;
+    const settingPrefix = hasPrefix ? setting.split("/")[0] : "";
+    const settingName = setting.replace(`${settingPrefix}/`, "");
+
+    const callback = settingsCallbacks[settingName];
+
+    if (hasPrefix)
+        extensionSettings[settingPrefix][settingName] = value;
+    else extensionSettings[setting] = value;
 
     if (callback) callback();
 
@@ -413,6 +441,11 @@ function settingsBooleanButton(event) {
 /**	Logs setting's values. */
 function displaySettings() {
     console.debug("[" + extensionName + "]", `The extension is ${extensionSettings.enabled ? "active" : "not active"}`);
+    console.debug("[" + extensionName + "]", `Show warnings is ${extensionSettings.show_warnings ? "enabled" : "disabled"}`);
+
+    console.debug("[" + extensionName + "]", `Macros - Experimental Macro Engine is ${extensionSettings.macros.experimental_macro_engine ? "enabled" : "disabled"}`);
+    console.debug("[" + extensionName + "]", `Macros - Collapse Multiple Newlines is ${extensionSettings.macros.collapse_multiple_newlines ? "enabled" : "disabled"}`);
+
     console.debug("[" + extensionName + "]", `Debug mode is ${extensionSettings.debug ? "active" : "not active"}`);
     console.debug("[" + extensionName + "]", structuredClone(extensionSettings));
 }
@@ -426,7 +459,10 @@ async function loadHTMLSettings() {
     // Event Listeners for the extension HTML
     $("#kofe-script-activate-extension").on("input", settingsBooleanButton);
     $("#kofe-script-show-warnings").on("input", settingsBooleanButton);
+
     $("#kofe-script-experimetal-macro-engine").on("input", settingsBooleanButton);
+    $("#kofe-script-collapse-multiple-newlines").on("input", settingsBooleanButton);
+
     $("#kofe-script-activate-debug").on("input", settingsBooleanButton);
     $("#kofe-script-check-configuration").on("click", displaySettings);
 
@@ -437,7 +473,10 @@ async function loadHTMLSettings() {
 function setSettingsMenu() {
     $("#kofe-script-activate-extension").prop("checked", extensionSettings.enabled).trigger("input");
     $("#kofe-script-show-warnings").prop("checked", extensionSettings.show_warnings).trigger("input");
-    $("#kofe-script-experimetal-macro-engine").prop("checked", extensionSettings.experimental_macro_engine).trigger("input");
+
+    $("#kofe-script-experimetal-macro-engine").prop("checked", extensionSettings.macros.experimental_macro_engine).trigger("input");
+    $("#kofe-script-collapse-multiple-newlines").prop("checked", extensionSettings.macros.collapse_multiple_newlines).trigger("input");
+
     $("#kofe-script-activate-debug").prop("checked", extensionSettings.debug).trigger("input");
 
     log("setSettingsMenu", extensionSettings);
