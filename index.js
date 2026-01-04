@@ -84,6 +84,17 @@ const log = (...msg) => {
 
 // * MARK:Extension methods
 
+/**
+ * @param {string} str
+ * @returns {string}
+ */
+export function un_escapeNewlines(str = '') {
+    return str
+        .replaceAll(/\\n/g, "\n")
+        .replaceAll(/\\r/g, "\r")
+        .replaceAll(/\\t/g, "\t");
+}
+
 function getWiPositionString(entry) {
     switch (entry.position) {
         case world_info_position.before: return '↑Char';
@@ -354,10 +365,15 @@ function registerMacros() {
             const sorter = natsort();
             const text = args[0];
             const delimiter = args[1] || '\n';
-            const textLines = text.split(delimiter);
+            const parsedDelimiter = un_escapeNewlines(delimiter);
+            const textLines = text.split(parsedDelimiter);
+
             textLines.sort((a,b) => sorter(a,b));
 
-            return textLines.join(delimiter);
+            log("sorttext macro:", {text, parsedDelimiter, textLines});
+            log(args);
+
+            return textLines.join(parsedDelimiter);
         }
     });
 }
