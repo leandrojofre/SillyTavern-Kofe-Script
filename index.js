@@ -7,6 +7,8 @@ import { MacroValueType } from "../../../macros/macro-system.js";
 
 import { natsort } from "./public/bundle.min.js";
 
+/** @typedef {KofeScript.ExtensionSettings} ExtensionSettings */
+
 // * MARK:Extension variables
 
 const context = () => SillyTavern.getContext();
@@ -26,21 +28,21 @@ const {
 } = context();
 
 const {
-    local: localVaraibles,
+    local: localVariables,
     global: globalVariables
 } = variables;
 
 const {
-    get: getLocalVariable
-} = localVaraibles;
-
-const {
-    get: getGlobalVariable
-} = globalVariables;
+    lodash
+} = SillyTavern.libs;
 
 const extensionName = "SillyTavern-Kofe-Script";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
+
+/** @type {ExtensionSettings} */
 const extensionSettings = extension_settings[extensionName];
+
+/** @type {ExtensionSettings} */
 const defaultSettings = {
     enabled: true,
     show_warnings: true,
@@ -83,6 +85,11 @@ let macroRegistered = false;
 const log = (...msg) => {
     if (!extensionSettings.enabled || !extensionSettings.debug) return;
     console.log("[" + extensionName + "]", ...msg);
+};
+
+const error = (...msg) => {
+    if (!extensionSettings.enabled || !extensionSettings.debug) return;
+    console.error("[" + extensionName + "]", ...msg);
 };
 
 // * MARK:Extension methods
