@@ -393,6 +393,54 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     `,
 }));
 
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+    name: 'natsort',
+    callback: function (namedArgs,/**@type {string} */ arrayInput) {
+        if (!arrayInput) return JSON.stringify([]);
+
+        log("natsort input:", arrayInput);
+
+        try {
+            const sorter = natsort();
+            const arrayItems = JSON.parse(arrayInput);
+            const isValidArray = Array.isArray(arrayItems);
+
+            if (!isValidArray) return JSON.stringify([]);
+
+            const sortedArray = arrayItems.sort(sorter);
+
+            return JSON.stringify(sortedArray);
+        } catch (error) {
+            console.error(extensionName, "- natsort command error:", error);
+
+            return JSON.stringify([]);
+        }
+    },
+    returns: 'Sorted array',
+    unnamedArgumentList: [
+        SlashCommandArgument.fromProps({
+            description: 'array input',
+            typeList: [ARGUMENT_TYPE.LIST],
+            defaultValue: JSON.stringify([]),
+            isRequired: true,
+        })
+    ],
+    helpString: `
+        <div>
+            Sorts the items from an array using a natural sorting method. Normal sorting would put <code>"Text 10"</code> before <code>"Text 8"</code>, natural sorting places <code>"Text 8"</code> before <code>"Text 10"</code>.
+        </div>
+        <div>
+            <strong>Example:</strong>
+            <ul>
+                <li>
+                    <pre><code>/natsort ["Text 1", "Text 8", "Text 70", "Text 8008", "Text 10"]</code></pre>
+                    <small>Returns: <code>["Text 1", "Text 8", "Text 10", "Text 70", "Text 8008"]</code></small>
+                </li>
+            </ul>
+        </div>
+    `,
+}));
+
 function escapeRegExp(s) {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
