@@ -347,6 +347,52 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     `,
 }));
 
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+    name: 'newsetfromarray',
+    callback: function (namedArgs,/**@type {string} */ arrayInput) {
+        if (!arrayInput) return JSON.stringify([]);
+
+        log("newsetfromarray input:", arrayInput);
+
+        try {
+            const arrayItems = JSON.parse(arrayInput);
+            const isValidArray = Array.isArray(arrayItems);
+
+            if (!isValidArray) return JSON.stringify([]);
+
+            const uniqueItems = Array.from(new Set(arrayItems));
+
+            return JSON.stringify(uniqueItems);
+        } catch (error) {
+            console.error(extensionName, "- newsetfromarray command error:", error);
+
+            return JSON.stringify([]);
+        }
+    },
+    returns: 'Array with unique items',
+    unnamedArgumentList: [
+        SlashCommandArgument.fromProps({
+            description: 'array input',
+            typeList: [ARGUMENT_TYPE.LIST],
+            defaultValue: JSON.stringify([]),
+            isRequired: true,
+        })
+    ],
+    helpString: `
+        <div>
+            Create a new set from an array, removing duplicate items.
+        </div>
+        <div>
+            <strong>Example:</strong>
+            <ul>
+                <li>
+                    <pre><code>/newsetfromarray [1, 2, 2, 3, 4, 4] => returns: [1, 2, 3, 4]</code></pre>
+                </li>
+            </ul>
+        </div>
+    `,
+}));
+
 function escapeRegExp(s) {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
