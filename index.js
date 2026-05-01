@@ -15,16 +15,17 @@ const context = () => SillyTavern.getContext();
 
 const {
     saveSettingsDebounced,
+    variables,
     extensionSettings: extension_settings,
-    loadWorldInfo,
     ARGUMENT_TYPE,
+    powerUserSettings,
+    loadWorldInfo,
+    t,
     SlashCommandArgument,
     SlashCommandNamedArgument,
     SlashCommand,
     SlashCommandParser,
     substituteParams,
-    variables,
-    t,
 } = context();
 
 const {
@@ -82,12 +83,38 @@ let macroRegistered = false;
 
 // * MARK:Debugs methods
 
-const log = (...msg) => {
+/**
+ * @param  {...any} msg
+ * @returns {void}
+ */
+const log = function (...msg) {
     if (!extensionSettings.enabled || !extensionSettings.debug) return;
     console.log("[" + extensionName + "]", ...msg);
 };
 
-const error = (...msg) => {
+/**
+ * @param  {...any} msg
+ * @returns {void}
+ */
+const debug = function (...msg) {
+    if (!extensionSettings.enabled || !extensionSettings.debug) return;
+    console.debug("[" + extensionName + "]", ...msg);
+};
+
+/**
+ * @param  {...any} msg
+ * @returns {void}
+ */
+const warn = function (...msg) {
+    if (!extensionSettings.enabled || !extensionSettings.debug) return;
+    console.warn("[" + extensionName + "]", ...msg);
+};
+
+/**
+ * @param  {...any} msg
+ * @returns {void}
+ */
+const error = function (...msg) {
     if (!extensionSettings.enabled || !extensionSettings.debug) return;
     console.error("[" + extensionName + "]", ...msg);
 };
@@ -441,14 +468,23 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     `,
 }));
 
+// * MARK:Macros Registration
+
 function escapeRegExp(s) {
     return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function registerMacros() {
-    if (!extensionSettings.enabled || !extensionSettings.macros.experimental_macro_engine) return;
+    const hasEngine = 'macros' in context();
 
-    log("registerMacros: Macros 2.0 experimental engine is enabled");
+    if (
+        !hasEngine ||
+        !extensionSettings.enabled ||
+        !extensionSettings.macros.experimental_macro_engine ||
+        !powerUserSettings.experimental_macro_engine
+    ) return warn('Macros 2.0 experimental engine is disabled');
+
+    log('Macros 2.0 experimental engine is enabled');
 
     macroRegistered = true;
 
