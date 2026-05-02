@@ -499,35 +499,38 @@ function registerMacros() {
             type: MacroValueType.STRING,
             description: 'The text to sort.',
         }, {
-            name: 'textdelimiter',
+            name: 'separator',
             type: MacroValueType.STRING,
             description: 'The delimiter used to split lines.',
         }, {
-            name: 'separator',
+            name: 'glue',
             type: MacroValueType.STRING,
-            description: 'Custom separator to use when joining the sorted lines (default: \\n).',
+            description: 'Text used to join the sorted lines (default: \\n).',
             optional: true,
             defaultValue: '\\n',
         }],
-        handler: function ({args}) {
+        delayArgResolution: false,
+        handler: function ({args: [text, separator, glue], resolve}) {
+            glue = !glue ? '\\n' : glue;
+            text = resolve(text || '');
+
             const sorter = natsort();
-            const text = args[0];
-
-            const delimiter = args[1];
-            const parsedDelimiter = un_escapeNewlines(delimiter);
-
-            const separator = args[2] || '\n';
             const parsedSeparator = un_escapeNewlines(separator);
+            const parsedGlue = un_escapeNewlines(glue);
+            const textLines = text.split(parsedSeparator);
 
-            const delimEsc = escapeRegExp(parsedDelimiter);
-            const regex = new RegExp(`[\\s\\S]*?${delimEsc}|[\\s\\S]+$`, 'g');
-            const textLines = text.match(regex) || [];
+            if (!textLines.length) return '';
 
-            textLines.sort((a,b) => sorter(a,b));
+            const filtered = textLines
+                .filter(text => text?.length >= 1)
 
-            log("sorttext macro:", {text, parsedDelimiter, parsedSeparator, delimEsc, regex, textLines});
+            if (!filtered.length) return '';
 
-            const joined = textLines.join(parsedSeparator)
+            const joined = filtered
+                .sort((a,b) => sorter(a,b))
+                .join(parsedGlue);
+
+            log("sorttext macro:", {text, parsedSeparator, parsedGlue, textLines, joined});
 
             if (extensionSettings.macros.collapse_multiple_newlines)
                 return joined.replaceAll(/(\r?\n){2,}/g, '\n');
