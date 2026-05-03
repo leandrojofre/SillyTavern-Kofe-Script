@@ -19,7 +19,21 @@ You might want to add additional HTML elements to ST. It's good practice to sepa
 
 				<label class="flex-container">
 					<input id="kofe-script-show-warnings" kofe-script-setting="show_warnings" type="checkbox" />
-					Show slash command warnings
+					Show error warnings
+				</label>
+			</div>
+			
+			<div class="flex-container flex-column separator-bottom">
+				<b>Macros</b>
+				
+				<label class="flex-container">
+					<input id="kofe-script-experimetal-macro-engine" kofe-script-setting="macros/experimental_macro_engine" type="checkbox" />
+					Use Macros 2.0 experimental enginge
+				</label>
+
+				<label class="flex-container">
+					<input id="kofe-script-collapse-multiple-newlines" kofe-script-setting="macros/collapse_multiple_newlines" type="checkbox" />
+					Collapse multiple newlines when sorting text with <code>{{sorttext}}</code>
 				</label>
 			</div>
 
@@ -36,8 +50,6 @@ You might want to add additional HTML elements to ST. It's good practice to sepa
 					Enable/Disable the debug console logs
 				</label>
 			</div>
-
-			<hr class="sysHR" />
 		</div>
 	</div>
 </div>

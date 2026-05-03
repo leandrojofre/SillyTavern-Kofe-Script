@@ -1,18 +1,25 @@
-#kofe-script-settings-window div.flex-container.flex-column,
-#kofe-script-settings-window label.flex-container.flex-column {
-	flex-direction: column;
-	align-items: normal;
-}
+#kofe-script-settings-window {
+	div.flex-container.flex-column,
+	label.flex-container.flex-column {
+		flex-direction: column;
+		align-items: normal;
+	}
+	
+	div.flex-container,
+	label.flex-container {
+		align-items: center;
+		flex-wrap: nowrap;
+	}
+	
+	.separator-bottom {
+		border-bottom: 1px solid #2a2a2a;
+		padding-bottom: 1vh;
+		border-radius: 1vh;
+	}
 
-#kofe-script-settings-window div.flex-container,
-#kofe-script-settings-window label.flex-container {
-	align-items: center;
-	flex-wrap: nowrap;
-}
-
-#kofe-script-settings-window  .separator-bottom {
-	border-bottom: 1px solid #2a2a2a;
-	padding-bottom: 1vh;
-	margin-bottom: 1vh;
-	border-radius: 1vh;
+	.separator-bottom:last-child {
+		border-bottom: none;
+		margin-bottom: 0;
+		border-radius: 0;
+	}
 }
