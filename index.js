@@ -538,36 +538,6 @@ function registerMacros() {
         }
     });
 
-    macros.register('tolowercase', {
-        category: macros.category.UTILITY,
-        returnType: MacroValueType.STRING,
-        description: 'Converts the input text to lowercase.',
-        unnamedArgs: [{
-            name: 'text',
-            type: MacroValueType.STRING,
-            description: 'The text to convert.',
-        }],
-        handler: function ({args: [text]}) {
-            const resolvedText = text ?? '';
-            return resolvedText.toLowerCase();
-        }
-    });
-
-    macros.register('touppercase', {
-        category: macros.category.UTILITY,
-        returnType: MacroValueType.STRING,
-        description: 'Converts the input text to uppercase.',
-        unnamedArgs: [{
-            name: 'text',
-            type: MacroValueType.STRING,
-            description: 'The text to convert.',
-        }],
-        handler: function ({args: [text]}) {
-            const resolvedText = text ?? '';
-            return resolvedText.toUpperCase();
-        }
-    });
-
     macros.register('getvarindex', {
         category: macros.category.UTILITY,
         list: {
