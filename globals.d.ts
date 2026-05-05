@@ -10,4 +10,8 @@ declare namespace KofeScript {
 		macros: ExtensionSettingsMacros;
 		debug: boolean;
 	};
+
+	type HTMLTemplateGetOptions = {
+        clone?: boolean;
+    };
 };

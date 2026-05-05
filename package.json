@@ -1,11 +1,11 @@
 {
 	"scripts": {
 		"release": "standard-version --release-as",
-		"build": "esbuild src/modules-bundle.js --bundle --format=esm --sourcemap --outfile=public/bundle.js --target=es2017",
-		"build:min": "esbuild src/modules-bundle.js --bundle --format=esm --minify --sourcemap --target=es2017 --outfile=public/bundle.min.js --target=es2017",
-		"build:nomap": "esbuild src/modules-bundle.js --bundle --format=esm --outfile=public/bundle.js --target=es2017",
-		"build:min:nomap": "esbuild src/modules-bundle.js --bundle --format=esm --minify --target=es2017 --outfile=public/bundle.min.js --target=es2017",
-		"build:watch": "esbuild src/modules-bundle.js --bundle --format=esm --sourcemap --outfile=public/bundle.js --target=es2017 --watch"
+		"build": "esbuild source/modules-bundle.js --bundle --format=esm --sourcemap --outfile=public/bundle.js --target=es2017",
+		"build:min": "esbuild source/modules-bundle.js --bundle --format=esm --minify --sourcemap --target=es2017 --outfile=public/bundle.min.js --target=es2017",
+		"build:nomap": "esbuild source/modules-bundle.js --bundle --format=esm --outfile=public/bundle.js --target=es2017",
+		"build:min:nomap": "esbuild source/modules-bundle.js --bundle --format=esm --minify --target=es2017 --outfile=public/bundle.min.js --target=es2017",
+		"build:watch": "esbuild source/modules-bundle.js --bundle --format=esm --sourcemap --outfile=public/bundle.js --target=es2017 --watch"
 	},
 	"dependencies": {
 		"natsort": "^2.0.3"

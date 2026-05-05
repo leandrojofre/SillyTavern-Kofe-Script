@@ -71,9 +71,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ steps.determine_version.outputs.new_version }}
-          release_name: SillyTavern-Kofe-Script v${{ steps.determine_version.outputs.new_version }}
+          release_name: Kofe-Script v${{ steps.determine_version.outputs.new_version }}
           body: |
            - **PR Title**: ${{ steps.pr_details.outputs.title }}
-           - **Merged by**: @${{ steps.pr_details.outputs.user }}
+           - **Created by**: @${{ steps.pr_details.outputs.user }}
           draft: false
           prerelease: false

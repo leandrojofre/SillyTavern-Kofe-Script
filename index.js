@@ -8,6 +8,7 @@ import { MacroValueType } from "../../../macros/macro-system.js";
 import { natsort } from "./public/bundle.min.js";
 
 /** @typedef {KofeScript.ExtensionSettings} ExtensionSettings */
+/** @typedef {KofeScript.HTMLTemplateGetOptions} HTMLTemplateGetOptions */
 
 // * MARK:Extension variables
 
@@ -19,6 +20,8 @@ const {
     extensionSettings: extension_settings,
     ARGUMENT_TYPE,
     powerUserSettings,
+    eventTypes,
+    eventSource,
     loadWorldInfo,
     t,
     SlashCommandArgument,
@@ -37,11 +40,14 @@ const {
     lodash
 } = SillyTavern.libs;
 
-const extensionName = "SillyTavern-Kofe-Script";
-const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
+const extensionName = 'Kofe-Script';
+const extensionFullName = `SillyTavern-${extensionName}`;
+const metadataName = extensionName.toLowerCase().replaceAll('-', '_');
+const htmlSuffix = extensionName.toLowerCase();
+const extensionFolderPath = `scripts/extensions/third-party/${extensionFullName}`;
 
 /** @type {ExtensionSettings} */
-const extensionSettings = extension_settings[extensionName];
+const extensionSettings = extension_settings[extensionFullName];
 
 /** @type {ExtensionSettings} */
 const defaultSettings = {
@@ -80,6 +86,53 @@ const localEnumProviders = {
 }
 
 let macroRegistered = false;
+
+const HTML_TEMPLATES = {
+	/**
+     * @param {string} [fileName]
+     * @param {HTMLTemplateGetOptions} [options]
+     * @returns {Promise<JQuery<HTMLElement>>}
+     */
+    get: async function(fileName = 'settings', {clone = false} = {}) {
+		const extensionFolderPath = HTML_TEMPLATES.extensionFolderPath;
+
+		if (!HTML_TEMPLATES[fileName]) {
+			try {
+				await $.get(`${extensionFolderPath}/source/templates/${fileName}.html`)
+					.done(function(response) {
+						HTML_TEMPLATES[fileName] = $(response);
+					})
+			} catch (err) {
+				const is404 = err?.status === 404;
+
+				error('Template rendering error.', {err});
+
+				if (is404 && !HTML_TEMPLATES.didFallbackFetch) {
+					HTML_TEMPLATES.extensionFolderPath = `${HTML_TEMPLATES.extensionFolderPath}.git`;
+					HTML_TEMPLATES.didFallbackFetch = true;
+
+					error(`Failed to fetch ${fileName}.html, attempting fallback path...`, {err, HTML_TEMPLATES: structuredClone({
+						extensionFolderPath: HTML_TEMPLATES.extensionFolderPath,
+						didFallbackFetch: HTML_TEMPLATES.didFallbackFetch,
+					})});
+
+					return await HTML_TEMPLATES.get(fileName, {clone});
+				}
+			}
+        }
+
+        const $file = HTML_TEMPLATES[fileName];
+
+        if (!$file) {
+            toastr.warning(t`HTML template could not be loaded`, extensionName);
+            return $();
+        }
+
+		return clone ? $file.clone() : $file;
+    },
+	didFallbackFetch: false,
+	extensionFolderPath,
+};
 
 // * MARK:Debugs methods
 
@@ -643,52 +696,45 @@ function displaySettings() {
 }
 
 /** Append settings menu on ST and set listeners. */
-async function loadHTMLSettings() {
-    const settingsHtml = await $.get(`${extensionFolderPath}/settings.html`);
+async function loadSettingsMenu() {
+    const settingsHtml = await HTML_TEMPLATES.get('settings');
 
-    $("#extensions_settings2").append(settingsHtml);
+    $('#extensions_settings2').append(settingsHtml);
 
     // Event Listeners for the extension HTML
-    $("#kofe-script-activate-extension").on("input", settingsBooleanButton);
-    $("#kofe-script-show-warnings").on("input", settingsBooleanButton);
+    $(`#${htmlSuffix}-enable`).on('input', settingsBooleanButton);
+    $(`#${htmlSuffix}-show-warnings`).on('input', settingsBooleanButton);
+    $(`#${htmlSuffix}-experimetal-macro-engine`).on('input', settingsBooleanButton);
+    $(`#${htmlSuffix}-collapse-multiple-newlines`).on('input', settingsBooleanButton);
 
-    $("#kofe-script-experimetal-macro-engine").on("input", settingsBooleanButton);
-    $("#kofe-script-collapse-multiple-newlines").on("input", settingsBooleanButton);
+    $(`#${htmlSuffix}-debug`).on('input', settingsBooleanButton);
+    $(`#${htmlSuffix}-check-configuration`).on('click', displaySettings);
 
-    $("#kofe-script-activate-debug").on("input", settingsBooleanButton);
-    $("#kofe-script-check-configuration").on("click", displaySettings);
+    log('loadHTMLSettings');
 
-    log("loadHTMLSettings");
-}
+    $(`#${htmlSuffix}-enable`).prop('checked', extensionSettings.enabled).trigger('input');
+    $(`#${htmlSuffix}-show-warnings`).prop('checked', extensionSettings.show_warnings).trigger('input');
+    $(`#${htmlSuffix}-experimetal-macro-engine`).prop('checked', extensionSettings.macros.experimental_macro_engine).trigger('input');
+    $(`#${htmlSuffix}-collapse-multiple-newlines`).prop('checked', extensionSettings.macros.collapse_multiple_newlines).trigger('input');
 
-/** Init setting values on the menu */
-function setSettingsMenu() {
-    $("#kofe-script-activate-extension").prop("checked", extensionSettings.enabled).trigger("input");
-    $("#kofe-script-show-warnings").prop("checked", extensionSettings.show_warnings).trigger("input");
+    $(`#${htmlSuffix}-debug`).prop('checked', extensionSettings.debug).trigger('input');
 
-    $("#kofe-script-experimetal-macro-engine").prop("checked", extensionSettings.macros.experimental_macro_engine).trigger("input");
-    $("#kofe-script-collapse-multiple-newlines").prop("checked", extensionSettings.macros.collapse_multiple_newlines).trigger("input");
-
-    $("#kofe-script-activate-debug").prop("checked", extensionSettings.debug).trigger("input");
-
-    log("setSettingsMenu", extensionSettings);
+    log('setSettingsMenu', extensionSettings);
 }
 
 // * MARK:Initialize Extension
 
-$(async function () {
-
-    if (!context().extensionSettings[extensionName]) {
-        context().extensionSettings[extensionName] = structuredClone(defaultSettings);
+eventSource.once(eventTypes.APP_INITIALIZED, async function () {
+    if (!context().extensionSettings[extensionFullName]) {
+        context().extensionSettings[extensionFullName] = structuredClone(defaultSettings);
     }
 
     for (const key of Object.keys(defaultSettings)) {
-        if (context().extensionSettings[extensionName][key] === undefined) {
-            context().extensionSettings[extensionName][key] = defaultSettings[key];
+        if (context().extensionSettings[extensionFullName][key] === undefined) {
+            context().extensionSettings[extensionFullName][key] = defaultSettings[key];
         }
     }
 
-    await loadHTMLSettings();
+    await loadSettingsMenu();
     registerMacros();
-    setSettingsMenu();
 });

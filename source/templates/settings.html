@@ -1,19 +1,16 @@
-<!--
-You might want to add additional HTML elements to ST. It's good practice to separate it out from your code
--->
-<div class="example-extension-settings">
+<div id="kofe-script-settings" class="kofe-script-custom-css">
 	<div class="inline-drawer">
 		<div class="inline-drawer-toggle inline-drawer-header">
 			<b>Kofe Script</b>
 			<div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
 		</div>
-		<div id="kofe-script-settings-window" class="inline-drawer-content" style="padding: 0.5vh;">
 
+		<div id="kofe-script-settings-window" class="inline-drawer-content p-15px">
 			<div class="flex-container flex-column separator-bottom">
 				<b>Settings</b>
 
 				<label class="flex-container">
-					<input id="kofe-script-activate-extension" kofe-script-setting="enabled" type="checkbox" />
+					<input id="kofe-script-enable" kofe-script-setting="enabled" type="checkbox" />
 					Enable/Disable the extension
 				</label>
 
@@ -22,10 +19,10 @@ You might want to add additional HTML elements to ST. It's good practice to sepa
 					Show error warnings
 				</label>
 			</div>
-			
+
 			<div class="flex-container flex-column separator-bottom">
 				<b>Macros</b>
-				
+
 				<label class="flex-container">
 					<input id="kofe-script-experimetal-macro-engine" kofe-script-setting="macros/experimental_macro_engine" type="checkbox" />
 					Use Macros 2.0 experimental enginge
@@ -46,7 +43,7 @@ You might want to add additional HTML elements to ST. It's good practice to sepa
 				</div>
 
 				<label class="flex-container">
-					<input id="kofe-script-activate-debug" kofe-script-setting="debug" type="checkbox" />
+					<input id="kofe-script-debug" kofe-script-setting="debug" type="checkbox" />
 					Enable/Disable the debug console logs
 				</label>
 			</div>
