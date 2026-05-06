@@ -333,8 +333,11 @@ async function getRawEntryField(args, uid) {
     return String(fieldValue);
 }
 
+// * MARK:Slash Commands
+
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-    name: 'getentryuid',
+    name: 'getexactentryuid',
+    aliases: ['getentryuid'],
     callback: async (args) => {
         if (!checkStrings([args.file, args.field, args.value], ["File", "Field", "Value"]))
             return "";
@@ -372,7 +375,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
             <strong>Example:</strong>
             <ul>
                 <li>
-                    <pre><code>/getentryuid file=chatLore field=comment value="title 1"</code></pre>
+                    <pre><code>/getexactentryuid file=chatLore field=comment value="title 1"</code></pre>
                 </li>
             </ul>
         </div>
