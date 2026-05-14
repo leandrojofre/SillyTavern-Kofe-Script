@@ -655,7 +655,11 @@ const settingsCallbacks = {
         // Nothing by the moment
     },
 
+    experimental_macro_engine_first_run: true,
     experimental_macro_engine: () => {
+        if (settingsCallbacks.experimental_macro_engine_first_run)
+            return settingsCallbacks.experimental_macro_engine_first_run = false;
+
         if (extensionSettings.macros.experimental_macro_engine && !macroRegistered)
             toastr.warning(t`Refresh the tab to use the new engine`);
 
