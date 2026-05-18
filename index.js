@@ -594,7 +594,7 @@ function registerMacros() {
         }
     });
 
-    macros.register('getvarindex', {
+    macros.register('getvarindexes', {
         category: macros.category.UTILITY,
         list: {
             min: 0
@@ -618,7 +618,7 @@ function registerMacros() {
             optional: false,
         }],
         handler: function ({args: [text, ...indexes]}) {
-            log('getvarindex', {text, indexes: structuredClone(indexes)});
+            log('getvarindexes', {text, indexes: structuredClone(indexes)});
 
             if (!indexes?.length) return '';
 
@@ -636,7 +636,7 @@ function registerMacros() {
                 for (const index of indexes)
                     result = result[index];
 
-                log('getvarindex', {variable, result});
+                log('getvarindexes', {variable, result});
 
                 return String(result);
             } catch (err) {
@@ -646,7 +646,7 @@ function registerMacros() {
         }
     });
 
-    macros.register('getglobalvarindex', {
+    macros.register('getglobalvarindexes', {
         category: macros.category.UTILITY,
         list: {
             min: 0
@@ -670,7 +670,7 @@ function registerMacros() {
             optional: false,
         }],
         handler: function ({args: [text, ...indexes]}) {
-            log('getglobalvarindex', {text, indexes: structuredClone(indexes)});
+            log('getglobalvarindexes', {text, indexes: structuredClone(indexes)});
 
             if (!indexes?.length) return '';
 
@@ -688,7 +688,7 @@ function registerMacros() {
                 for (const index of indexes)
                     result = result[index];
 
-                log('getglobalvarindex', {variable, result});
+                log('getglobalvarindexes', {variable, result});
 
                 return String(result);
             } catch (err) {
