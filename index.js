@@ -645,6 +645,58 @@ function registerMacros() {
             }
         }
     });
+
+    macros.register('getglobalvarindex', {
+        category: macros.category.UTILITY,
+        list: {
+            min: 0
+        },
+        returnType: [
+            MacroValueType.STRING,
+            MacroValueType.NUMBER,
+            MacroValueType.INTEGER,
+            MacroValueType.BOOLEAN,
+        ],
+        description: 'Fetches the value of a global variable at a given index.',
+        unnamedArgs: [{
+            name: 'varname',
+            type: MacroValueType.STRING,
+            description: 'The name of the variable.',
+            optional: false,
+        },{
+            name: 'indexes',
+            type: MacroValueType.STRING,
+            description: 'The index/es used to target a value of the global variable.',
+            optional: false,
+        }],
+        handler: function ({args: [text, ...indexes]}) {
+            log('getglobalvarindex', {text, indexes: structuredClone(indexes)});
+
+            if (!indexes?.length) return '';
+
+            const rawVariable = globalVariables.get(text);
+
+            if (typeof rawVariable !== 'string') return '';
+
+            try {
+                const variable = JSON.parse(rawVariable);
+
+                if (!variable || typeof variable !== 'object') return '';
+
+                let result = variable[indexes.shift()];
+
+                for (const index of indexes)
+                    result = result[index];
+
+                log('getglobalvarindex', {variable, result});
+
+                return String(result);
+            } catch (err) {
+                error({err, text, indexes});
+                return '';
+            }
+        }
+    });
 }
 
 // * MARK:Settings Controls
