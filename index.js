@@ -46,6 +46,14 @@ const metadataName = extensionName.toLowerCase().replaceAll('-', '_');
 const htmlSuffix = extensionName.toLowerCase();
 const extensionFolderPath = `scripts/extensions/third-party/${extensionFullName}`;
 
+/**
+ * @enum {['string', 'object']}
+ */
+const getIndexValidTypes = [
+    'string',
+    'object'
+]
+
 /** @type {ExtensionSettings} */
 const extensionSettings = extension_settings[extensionFullName];
 
@@ -623,11 +631,12 @@ function registerMacros() {
             if (!indexes?.length) return '';
 
             const rawVariable = localVariables.get(text);
+            const rawType = typeof rawVariable;
 
-            if (typeof rawVariable !== 'string') return '';
+            if (!rawVariable || !getIndexValidTypes.includes(rawType)) return '';
 
             try {
-                const variable = JSON.parse(rawVariable);
+                const variable = rawType === 'string' ? JSON.parse(rawVariable) : rawVariable;
 
                 if (!variable || typeof variable !== 'object') return '';
 
@@ -675,8 +684,9 @@ function registerMacros() {
             if (!indexes?.length) return '';
 
             const rawVariable = globalVariables.get(text);
+            const rawType = typeof rawVariable;
 
-            if (typeof rawVariable !== 'string') return '';
+            if (!rawVariable || !getIndexValidTypes.includes(rawType)) return '';
 
             try {
                 const variable = JSON.parse(rawVariable);
