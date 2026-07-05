@@ -22,6 +22,7 @@ const {
     powerUserSettings,
     eventTypes,
     eventSource,
+    saveChat,
     loadWorldInfo,
     t,
     SlashCommandArgument,
@@ -526,6 +527,91 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
                 <li>
                     <pre><code>/natsort ["Text 1", "Text 8", "Text 70", "Text 8008", "Text 10"]</code></pre>
                     <small>Returns: <code>["Text 1", "Text 8", "Text 10", "Text 70", "Text 8008"]</code></small>
+                </li>
+            </ul>
+        </div>
+    `,
+}));
+
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+    name: 'shift',
+    /**
+     * @param {import('../../../slash-commands/SlashCommand.js').NamedArguments} args
+     * @param {string} target
+     * @returns {string}
+     */
+    callback: function (args, target) {
+        let get, set;
+
+        try {
+            if (args._scope.existsVariable(target)) {
+                get = () => args._scope.getVariable(target);
+                set = () => args._scope.setVariable(target, JSON.stringify(list));
+            } else if (localVariables.has(target)) {
+                get = () => localVariables.get(target);
+                set = (list) => {
+                    localVariables.set(target, list);
+                    saveChat();
+                };
+            } else if (globalVariables.has(target)) {
+                get = () => globalVariables.get(target);
+                set = (list) => {
+                    globalVariables.set(target, list);
+                    saveSettingsDebounced();
+                };
+            } else {
+                get = () => target;
+                set = () => {};
+            }
+
+            const list = get();
+            const listType = typeof list;
+            const validValue = getIndexValidTypes.includes(listType);
+
+            if (!validValue) return '';
+
+            const rawValue = listType === 'string' ? JSON.parse(list) : list;
+            const isList = Array.isArray(rawValue);
+            let value = '';
+
+            if (isList) {
+                value = rawValue.shift();
+                set(rawValue);
+            }
+
+            if (typeof value == 'string') return value;
+
+            return JSON.stringify(value);
+        } catch (err) {
+            error({err, get, set});
+            return '';
+        }
+    },
+    unnamedArgumentList: [
+        SlashCommandArgument.fromProps({
+            description: 'target list',
+            isRequired: true,
+            typeList: [
+                ARGUMENT_TYPE.VARIABLE_NAME,
+                ARGUMENT_TYPE.LIST
+            ],
+        }),
+    ],
+    returns: 'The removed element',
+    helpString: `
+        <div>
+            Removes the first element from a list and returns it.
+        </div>
+        <div>
+            <strong>Example:</strong>
+            <ul>
+                <li>
+                    <pre><code>/shift ["A", "B", "C"]</code></pre>
+                    <small>Returns: <code>"A"</code></small>
+                </li>
+                <li>
+                    <pre><code>/let x [1, 2, 3, 4, 5] | /shift x</code></pre>
+                    <small>Returns: <code>1</code></small>
                 </li>
             </ul>
         </div>
