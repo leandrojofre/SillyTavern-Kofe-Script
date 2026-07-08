@@ -345,8 +345,8 @@ async function getRawEntryField(args, uid) {
 // * MARK:Slash Commands
 
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-    name: 'getexactentryuid',
-    aliases: ['getentryuid'],
+    name: 'get-exact-entry-uid',
+    aliases: ['getentryuid', 'getexactentryuid'],
     callback: async (args) => {
         if (!checkStrings([args.file, args.field, args.value], ["File", "Field", "Value"]))
             return "";
@@ -384,7 +384,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
             <strong>Example:</strong>
             <ul>
                 <li>
-                    <pre><code>/getexactentryuid file=chatLore field=comment value="title 1"</code></pre>
+                    <pre><code>/get-exact-entry-uid file=chatLore field=comment value="title 1"</code></pre>
                 </li>
             </ul>
         </div>
@@ -392,7 +392,8 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
 }));
 
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-    name: 'getrawentryfield',
+    name: 'get-raw-entry-field',
+    aliases: ['getrawentryfield'],
     callback: async (args, uid) => {
         if (!checkStrings([args.file, args.field, uid], ["File", "Field", "UID"]))
             return "";
@@ -432,7 +433,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
             <strong>Example:</strong>
             <ul>
                 <li>
-                    <pre><code>/getrawentryfield file=chatLore field=content 123</code></pre>
+                    <pre><code>/get-raw-entry-field file=chatLore field=content 123</code></pre>
                 </li>
             </ul>
         </div>
@@ -440,11 +441,12 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
 }));
 
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-    name: 'newsetfromarray',
+    name: 'new-set-from-list',
+    aliases: ['newsetfromarray'],
     callback: function (namedArgs,/**@type {string} */ arrayInput) {
         if (!arrayInput) return JSON.stringify([]);
 
-        log("newsetfromarray input:", arrayInput);
+        log("new-set-from-list input:", arrayInput);
 
         try {
             const arrayItems = JSON.parse(arrayInput);
@@ -456,7 +458,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
 
             return JSON.stringify(uniqueItems);
         } catch (error) {
-            console.error(extensionName, "- newsetfromarray command error:", error);
+            console.error(extensionName, "- new-set-from-list command error:", error);
 
             return JSON.stringify([]);
         }
@@ -478,7 +480,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
             <strong>Example:</strong>
             <ul>
                 <li>
-                    <pre><code>/newsetfromarray [1, 2, 2, 3, 4, 4] => returns: [1, 2, 3, 4]</code></pre>
+                    <pre><code>/new-set-from-list [1, 2, 2, 3, 4, 4] => returns: [1, 2, 3, 4]</code></pre>
                 </li>
             </ul>
         </div>
