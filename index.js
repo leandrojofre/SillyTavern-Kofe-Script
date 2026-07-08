@@ -217,7 +217,7 @@ function checkStrings(params, names=[]) {
 
     for (let i = 0; i < params.length; i++) {
         const string = params[i];
-        const name = names[i] ?? "An argument";
+        const name = names[i] ?? 'An argument';
 
         if (!isNaN(Number(string))) {
             continue;
@@ -348,8 +348,8 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     name: 'get-exact-entry-uid',
     aliases: ['getentryuid', 'getexactentryuid'],
     callback: async (args) => {
-        if (!checkStrings([args.file, args.field, args.value], ["File", "Field", "Value"]))
-            return "";
+        if (!checkStrings([args.file, args.field, args.value], ['File', 'Field', 'Value']))
+            return '';
 
         return await getEntryUid(args, String(args.value));
     },
@@ -395,8 +395,8 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     name: 'get-raw-entry-field',
     aliases: ['getrawentryfield'],
     callback: async (args, uid) => {
-        if (!checkStrings([args.file, args.field, uid], ["File", "Field", "UID"]))
-            return "";
+        if (!checkStrings([args.file, args.field, uid], ['File', 'Field', 'UID']))
+            return '';
 
         return await getRawEntryField(args, String(uid));
     },
@@ -446,7 +446,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     callback: function (namedArgs,/**@type {string} */ arrayInput) {
         if (!arrayInput) return JSON.stringify([]);
 
-        log("new-set-from-list input:", arrayInput);
+        log('new-set-from-list input:', arrayInput);
 
         try {
             const arrayItems = JSON.parse(arrayInput);
@@ -458,7 +458,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
 
             return JSON.stringify(uniqueItems);
         } catch (error) {
-            console.error(extensionName, "- new-set-from-list command error:", error);
+            console.error(extensionName, '- new-set-from-list command error:', error);
 
             return JSON.stringify([]);
         }
@@ -492,7 +492,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     callback: function (namedArgs,/**@type {string} */ arrayInput) {
         if (!arrayInput) return JSON.stringify([]);
 
-        log("natsort input:", arrayInput);
+        log('natsort input:', arrayInput);
 
         try {
             const sorter = natsort();
@@ -505,7 +505,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
 
             return JSON.stringify(sortedArray);
         } catch (error) {
-            console.error(extensionName, "- natsort command error:", error);
+            console.error(extensionName, '- natsort command error:', error);
 
             return JSON.stringify([]);
         }
