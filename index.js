@@ -354,6 +354,29 @@ function isTrueBoolean(arg) {
     return ['on', 'true', '1'].includes(arg?.trim()?.toLowerCase());
 }
 
+/**
+ * @param {string} search
+ * @param {object} [options]
+ * @param {boolean} [options.allowAvatar]
+ * @return {Character}
+ */
+function findCharacter(search, {allowAvatar = true} = {}) {
+    const {characters, groupId, groups} = context();
+    const group = groupId ? groups.find(g => g.id === groupId) : null;
+    const members = group ? characters.filter(c => group.members.includes(c.avatar)) : [];
+    let character;
+
+    search = String(search).trim();
+
+    if (allowAvatar) character = members.find(m => m.avatar === search);
+    if (allowAvatar && !character) character = characters.find(c => c.avatar === search);
+
+    if (!character) character = members.find(m => m.name === search);
+    if (!character) character = characters.find(c => c.name === search);
+
+    return character;
+}
+
 // * MARK:Slash Commands
 
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({
