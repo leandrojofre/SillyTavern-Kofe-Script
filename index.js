@@ -9,6 +9,7 @@ import { natsort } from "./public/bundle.min.js";
 
 /** @typedef {KofeScript.ExtensionSettings} ExtensionSettings */
 /** @typedef {KofeScript.HTMLTemplateGetOptions} HTMLTemplateGetOptions */
+/** @typedef {KofeScript.WIEntry} WIEntry */
 
 // * MARK:Extension variables
 
@@ -223,11 +224,8 @@ function checkStrings(params, names=[]) {
             continue;
         }
 
-        // @ts-ignore
         if (!String(string).trim() || !string) {
-
-            // @ts-ignore
-            if (extensionSettings.show_warnings) toastr.warning(t`${name} is empty`);
+            if (extensionSettings.show_warnings) toastr.warning(t`${name} is empty`, extensionName);
 
             valid = false;
             break;
@@ -239,29 +237,29 @@ function checkStrings(params, names=[]) {
 
 /** Get a world info entries
     @param {String} file - Name of the lorebook
-    @returns {Promise<String|Object>}
+    @returns {Promise<WIEntry[]>}
 */
 async function getEntriesFromFile(file) {
     if (!file || !world_names.includes(file)) {
         // @ts-ignore
-        if (extensionSettings.show_warnings) toastr.warning(t`Valid World Info file name is required`);
-        return '';
+        if (extensionSettings.show_warnings) toastr.warning(t`Valid World Info file name is required`, extensionName);
+        return [];
     }
 
     const data = await loadWorldInfo(file);
 
     if (!data || !('entries' in data)) {
         // @ts-ignore
-        if (extensionSettings.show_warnings) toastr.warning(t`World Info file has an invalid format`);
-        return '';
+        if (extensionSettings.show_warnings) toastr.warning(t`World Info file has an invalid format`, extensionName);
+        return [];
     }
 
     const entries = Object.values(data.entries);
 
     if (!entries || entries.length === 0) {
         // @ts-ignore
-        if (extensionSettings.show_warnings) toastr.warning(t`World Info file has no entries`);
-        return '';
+        if (extensionSettings.show_warnings) toastr.warning(t`World Info file has no entries`, extensionName);
+        return [];
     }
 
     return entries;
@@ -269,30 +267,35 @@ async function getEntriesFromFile(file) {
 
 /** Get the UID of world info entry
     @param {Object} args - Lorebook name and entry field to match
-    @param {String} value - Value to match against args
-    @returns {Promise<String>} UID of the found lorebook entry
+    @param {string} unnamed - Value to match against args
+    @returns {Promise<string>} UID of the found lorebook entry
 */
-async function getEntryUid(args, value) {
-    const file = args.file;
-    const field = args.field;
-
+async function getEntryUid(args, unnamed = '') {
+    let {file = '', field = 'content', includes = 'false', value = ''} = args;
     const entries = await getEntriesFromFile(file);
 
-    if (!entries) return "";
+    if (!entries?.length) return '';
 
     if (newWorldInfoEntryTemplate[field] === undefined) {
-        // @ts-ignore
-        if (extensionSettings.show_warnings) toastr.warning(t`Valid field name is required`);
-        return "";
+        if (extensionSettings.show_warnings) toastr.warning(t`Valid field name is required`, extensionName);
+        return '';
     }
 
-    const macroedValue = substituteParams(value);
-    const target = [...entries].find(entry => substituteParams(String(entry[field])) === macroedValue);
+    includes = isTrueBoolean(includes);
+
+    log({args, unnamed});
+
+    const macroedValue = substituteParams(unnamed || value || '');
+    const target = entries.find(entry => {
+        log({ entry, field, macroedValue });
+        return includes ?
+            substituteParams(String(entry[field])).includes(macroedValue) :
+            substituteParams(String(entry[field])) === macroedValue
+    });
 
     if (!target) {
-        // @ts-ignore
-        if (extensionSettings.show_warnings) toastr.warning(t`No match found`);
-        return "";
+        if (extensionSettings.show_warnings) toastr.warning(t`No match found`, extensionName);
+        return '';
     }
 
     const uid = target.uid;
@@ -311,28 +314,28 @@ async function getRawEntryField(args, uid) {
 
     const entries = await getEntriesFromFile(file);
 
-    if (!entries) {
-        return "";
+    if (!entries?.length) {
+        return '';
     }
 
     const entry = entries.find(x => String(x.uid) === String(uid));
 
     if (!entry) {
         // @ts-ignore
-        if (extensionSettings.show_warnings) toastr.warning('Valid UID is required');
-        return "";
+        if (extensionSettings.show_warnings) toastr.warning('Valid UID is required', extensionName);
+        return '';
     }
 
     if (newWorldInfoEntryTemplate[field] === undefined) {
         // @ts-ignore
-        if (extensionSettings.show_warnings) toastr.warning('Valid field name is required');
-        return "";
+        if (extensionSettings.show_warnings) toastr.warning('Valid field name is required', extensionName);
+        return '';
     }
 
     const fieldValue = entry[field];
 
     if (fieldValue === undefined) {
-        return "";
+        return '';
     }
 
     if (Array.isArray(fieldValue)) {
@@ -342,16 +345,25 @@ async function getRawEntryField(args, uid) {
     return String(fieldValue);
 }
 
+/**
+ * Checks if a string is "true" value.
+ * @param {string} arg String to check
+ * @returns {boolean} True if the string is true, false otherwise.
+ */
+function isTrueBoolean(arg) {
+    return ['on', 'true', '1'].includes(arg?.trim()?.toLowerCase());
+}
+
 // * MARK:Slash Commands
 
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-    name: 'get-exact-entry-uid',
+    name: 'findentryexact',
     aliases: ['getentryuid', 'getexactentryuid'],
-    callback: async (args) => {
-        if (!checkStrings([args.file, args.field, args.value], ['File', 'Field', 'Value']))
+    callback: async (args, unnamed) => {
+        if (!checkStrings([args.file, args.field], ['File', 'Field']))
             return '';
 
-        return await getEntryUid(args, String(args.value));
+        return await getEntryUid(args, String(unnamed || ''));
     },
     returns: 'entry uid',
     namedArgumentList: [
@@ -366,15 +378,31 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
             name: 'field',
             description: 'field to match',
             typeList: [ARGUMENT_TYPE.STRING],
-            isRequired: true,
+            defaultValue: 'content',
+            isRequired: false,
             enumList: localEnumProviders.wiEntryFields()
         }),
         SlashCommandNamedArgument.fromProps({
+            name: 'includes',
+            description: 'instead of matching if the field and value are a one to one match, checks if the field includes the value',
+            typeList: [ARGUMENT_TYPE.BOOLEAN],
+            defaultValue: 'false',
+            isRequired: false,
+            enumProvider: commonEnumProviders.boolean(),
+        }),
+        SlashCommandNamedArgument.fromProps({
             name: 'value',
-            description: 'value to match against field - case sensitive',
+            description: 'value to match against field (deprecated argument - use unnamed argument instead)',
             typeList: [ARGUMENT_TYPE.STRING],
-            isRequired: true
+            isRequired: false
         })
+    ],
+    unnamedArgumentList: [
+        SlashCommandArgument.fromProps({
+            description: 'value to match against field (case sensitive)',
+            typeList: [ARGUMENT_TYPE.STRING],
+            isRequired: true,
+        }),
     ],
     helpString: `
         <div>
@@ -811,10 +839,10 @@ const settingsCallbacks = {
             return settingsCallbacks.experimental_macro_engine_first_run = false;
 
         if (extensionSettings.macros.experimental_macro_engine && !macroRegistered)
-            toastr.warning(t`Refresh the tab to use the new engine`);
+            toastr.warning(t`Refresh the tab to use the new engine`, extensionName);
 
         if (!extensionSettings.macros.experimental_macro_engine && macroRegistered)
-            toastr.warning(t`Refresh the tab to disable the experimental engine`);
+            toastr.warning(t`Refresh the tab to disable the experimental engine`, extensionName);
     }
 };
 
