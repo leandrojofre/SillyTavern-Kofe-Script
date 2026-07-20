@@ -283,11 +283,10 @@ async function getEntryUid(args, unnamed = '') {
 
     includes = isTrueBoolean(includes);
 
-    log({args, unnamed});
+    log({args, unnamed, entries});
 
     const macroedValue = substituteParams(unnamed || value || '');
     const target = entries.find(entry => {
-        log({ entry, field, macroedValue });
         return includes ?
             substituteParams(String(entry[field])).includes(macroedValue) :
             substituteParams(String(entry[field])) === macroedValue
