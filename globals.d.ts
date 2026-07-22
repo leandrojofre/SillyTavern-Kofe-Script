@@ -1,4 +1,7 @@
 declare namespace KofeScript {
+    type NamedArguments = import('../../../slash-commands/SlashCommand.js').NamedArguments;
+    type NamedArgumentsCapture = import('../../../slash-commands/SlashCommand.js').NamedArgumentsCapture;
+
     type WIEntry = {
         uid: number;
         world: string;

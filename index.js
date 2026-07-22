@@ -10,6 +10,8 @@ import { natsort } from "./public/bundle.min.js";
 /** @typedef {KofeScript.ExtensionSettings} ExtensionSettings */
 /** @typedef {KofeScript.HTMLTemplateGetOptions} HTMLTemplateGetOptions */
 /** @typedef {KofeScript.WIEntry} WIEntry */
+/** @typedef {KofeScript.NamedArguments} NamedArguments */
+/** @typedef {KofeScript.NamedArgumentsCapture} NamedArgumentsCapture */
 
 // * MARK:Extension variables
 
@@ -213,7 +215,7 @@ function getWiPositionString(entry) {
     @param {Array} names - Optional array of titles for the warning message
     @returns {boolean}
 */
-function checkStrings(params, names=[]) {
+function checkStrings(params, names = []) {
     let valid = true;
 
     for (let i = 0; i < params.length; i++) {
@@ -263,6 +265,38 @@ async function getEntriesFromFile(file) {
     }
 
     return entries;
+}
+
+/**
+ * Checks if a string is "true" value.
+ * @param {string} arg String to check
+ * @returns {boolean} True if the string is true, false otherwise.
+ */
+function isTrueBoolean(arg) {
+    return ['on', 'true', '1'].includes(arg?.trim()?.toLowerCase());
+}
+
+/**
+ * @param {string} search
+ * @param {object} [options]
+ * @param {boolean} [options.allowAvatar]
+ * @return {Character}
+ */
+function findCharacter(search, {allowAvatar = true} = {}) {
+    const {characters, groupId, groups} = context();
+    const group = groupId ? groups.find(g => g.id === groupId) : null;
+    const members = group ? characters.filter(c => group.members.includes(c.avatar)) : [];
+    let character;
+
+    search = String(search).trim();
+
+    if (allowAvatar) character = members.find(m => m.avatar === search);
+    if (allowAvatar && !character) character = characters.find(c => c.avatar === search);
+
+    if (!character) character = members.find(m => m.name === search);
+    if (!character) character = characters.find(c => c.name === search);
+
+    return character;
 }
 
 /** Get the UID of world info entry
@@ -345,35 +379,58 @@ async function getRawEntryField(args, uid) {
 }
 
 /**
- * Checks if a string is "true" value.
- * @param {string} arg String to check
- * @returns {boolean} True if the string is true, false otherwise.
+ * @param {NamedArguments} args
+ * @param {string} target
+ * @param {object} options
+ * @param {string} [options.operation]
+ * @returns {string}
  */
-function isTrueBoolean(arg) {
-    return ['on', 'true', '1'].includes(arg?.trim()?.toLowerCase());
-}
+function arrayManipulationCommand(args, target, {operation = 'pop'}) {
+    let get, set;
 
-/**
- * @param {string} search
- * @param {object} [options]
- * @param {boolean} [options.allowAvatar]
- * @return {Character}
- */
-function findCharacter(search, {allowAvatar = true} = {}) {
-    const {characters, groupId, groups} = context();
-    const group = groupId ? groups.find(g => g.id === groupId) : null;
-    const members = group ? characters.filter(c => group.members.includes(c.avatar)) : [];
-    let character;
+    try {
+        if (args._scope.existsVariable(target)) {
+            get = () => args._scope.getVariable(target);
+            set = () => args._scope.setVariable(target, JSON.stringify(list));
+        } else if (localVariables.has(target)) {
+            get = () => localVariables.get(target);
+            set = (list) => {
+                localVariables.set(target, list);
+                saveChat();
+            };
+        } else if (globalVariables.has(target)) {
+            get = () => globalVariables.get(target);
+            set = (list) => {
+                globalVariables.set(target, list);
+                saveSettingsDebounced();
+            };
+        } else {
+            get = () => target;
+            set = () => {};
+        }
 
-    search = String(search).trim();
+        const list = get();
+        const listType = typeof list;
+        const validValue = getIndexValidTypes.includes(listType);
 
-    if (allowAvatar) character = members.find(m => m.avatar === search);
-    if (allowAvatar && !character) character = characters.find(c => c.avatar === search);
+        if (!validValue) return '';
 
-    if (!character) character = members.find(m => m.name === search);
-    if (!character) character = characters.find(c => c.name === search);
+        const rawValue = listType === 'string' ? JSON.parse(list) : Array.from(list ?? []);
+        const isList = Array.isArray(rawValue);
+        let value = '';
 
-    return character;
+        if (isList) {
+            value = rawValue[operation]();
+            set(rawValue);
+        }
+
+        if (typeof value == 'string') return value;
+
+        return JSON.stringify(value);
+    } catch (err) {
+        error({err, get, set});
+        return '';
+    }
 }
 
 // * MARK:Slash Commands
@@ -588,57 +645,11 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     name: 'shift',
     /**
-     * @param {import('../../../slash-commands/SlashCommand.js').NamedArguments} args
+     * @param {NamedArguments} args
      * @param {string} target
      * @returns {string}
      */
-    callback: function (args, target) {
-        let get, set;
-
-        try {
-            if (args._scope.existsVariable(target)) {
-                get = () => args._scope.getVariable(target);
-                set = () => args._scope.setVariable(target, JSON.stringify(list));
-            } else if (localVariables.has(target)) {
-                get = () => localVariables.get(target);
-                set = (list) => {
-                    localVariables.set(target, list);
-                    saveChat();
-                };
-            } else if (globalVariables.has(target)) {
-                get = () => globalVariables.get(target);
-                set = (list) => {
-                    globalVariables.set(target, list);
-                    saveSettingsDebounced();
-                };
-            } else {
-                get = () => target;
-                set = () => {};
-            }
-
-            const list = get();
-            const listType = typeof list;
-            const validValue = getIndexValidTypes.includes(listType);
-
-            if (!validValue) return '';
-
-            const rawValue = listType === 'string' ? JSON.parse(list) : list;
-            const isList = Array.isArray(rawValue);
-            let value = '';
-
-            if (isList) {
-                value = rawValue.shift();
-                set(rawValue);
-            }
-
-            if (typeof value == 'string') return value;
-
-            return JSON.stringify(value);
-        } catch (err) {
-            error({err, get, set});
-            return '';
-        }
-    },
+    callback: (args, target) => arrayManipulationCommand(args, target, {operation: 'shift'}),
     unnamedArgumentList: [
         SlashCommandArgument.fromProps({
             description: 'target list',
@@ -664,6 +675,45 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
                 <li>
                     <pre><code>/let x [1, 2, 3, 4, 5] | /shift x</code></pre>
                     <small>Returns: <code>1</code></small>
+                </li>
+            </ul>
+        </div>
+    `,
+}));
+
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+    name: 'pop',
+    /**
+     * @param {NamedArguments} args
+     * @param {string} target
+     * @returns {string}
+     */
+    callback: (args, target) => arrayManipulationCommand(args, target, {operation: 'pop'}),
+    unnamedArgumentList: [
+        SlashCommandArgument.fromProps({
+            description: 'target list',
+            isRequired: true,
+            typeList: [
+                ARGUMENT_TYPE.VARIABLE_NAME,
+                ARGUMENT_TYPE.LIST
+            ],
+        }),
+    ],
+    returns: 'The removed element',
+    helpString: `
+        <div>
+            Removes the last element from a list and returns it.
+        </div>
+        <div>
+            <strong>Example:</strong>
+            <ul>
+                <li>
+                    <pre><code>/pop ["A", "B", "C"]</code></pre>
+                    <small>Returns: <code>"C"</code></small>
+                </li>
+                <li>
+                    <pre><code>/let x [1, 2, 3, 4, 5] | /pop x</code></pre>
+                    <small>Returns: <code>5</code></small>
                 </li>
             </ul>
         </div>
