@@ -3,7 +3,6 @@ import { newWorldInfoEntryDefinition, newWorldInfoEntryTemplate, world_info_logi
 import { enumTypes, SlashCommandEnumValue } from "../../../slash-commands/SlashCommandEnumValue.js";
 import { SlashCommandClosure } from "../../../slash-commands/SlashCommandClosure.js";
 import { SlashCommandExecutor } from "../../../slash-commands/SlashCommandExecutor.js";
-import { MacroValueType } from "../../../macros/macro-system.js";
 
 import { natsort } from "./public/bundle.min.js";
 
@@ -744,19 +743,19 @@ function registerMacros() {
 
     macros.register('sorttext', {
         category: macros.category.UTILITY,
-        returnType: MacroValueType.STRING,
+        returnType: macros.valueType.STRING,
         description: 'It breaks the input text into lines, sorts them alphabetically, and then joins them back together.',
         unnamedArgs: [{
             name: 'text',
-            type: MacroValueType.STRING,
+            type: macros.valueType.STRING,
             description: 'The text to sort.',
         }, {
             name: 'separator',
-            type: MacroValueType.STRING,
+            type: macros.valueType.STRING,
             description: 'The delimiter used to split lines.',
         }, {
             name: 'glue',
-            type: MacroValueType.STRING,
+            type: macros.valueType.STRING,
             description: 'Text used to join the sorted lines (default: \\n).',
             optional: true,
             defaultValue: '\\n',
@@ -796,20 +795,20 @@ function registerMacros() {
             min: 0
         },
         returnType: [
-            MacroValueType.STRING,
-            MacroValueType.NUMBER,
-            MacroValueType.INTEGER,
-            MacroValueType.BOOLEAN,
+            macros.valueType.STRING,
+            macros.valueType.NUMBER,
+            macros.valueType.INTEGER,
+            macros.valueType.BOOLEAN,
         ],
         description: 'Fetches the value of a local variable at a given index.',
         unnamedArgs: [{
             name: 'varname',
-            type: MacroValueType.STRING,
+            type: macros.valueType.STRING,
             description: 'The name of the variable.',
             optional: false,
         },{
             name: 'indexes',
-            type: MacroValueType.STRING,
+            type: macros.valueType.STRING,
             description: 'The index/es used to target a value of the variable.',
             optional: false,
         }],
@@ -849,20 +848,20 @@ function registerMacros() {
             min: 0
         },
         returnType: [
-            MacroValueType.STRING,
-            MacroValueType.NUMBER,
-            MacroValueType.INTEGER,
-            MacroValueType.BOOLEAN,
+            macros.valueType.STRING,
+            macros.valueType.NUMBER,
+            macros.valueType.INTEGER,
+            macros.valueType.BOOLEAN,
         ],
         description: 'Fetches the value of a global variable at a given index.',
         unnamedArgs: [{
             name: 'varname',
-            type: MacroValueType.STRING,
+            type: macros.valueType.STRING,
             description: 'The name of the variable.',
             optional: false,
         },{
             name: 'indexes',
-            type: MacroValueType.STRING,
+            type: macros.valueType.STRING,
             description: 'The index/es used to target a value of the global variable.',
             optional: false,
         }],
@@ -891,6 +890,51 @@ function registerMacros() {
                 return String(result);
             } catch (err) {
                 error({err, text, indexes});
+                return '';
+            }
+        }
+    });
+
+    macros.register('joinlist', {
+        category: macros.category.UTILITY,
+        returnType: macros.valueType.STRING,
+        description: 'It will merge a list into a string, using the input text as glue.',
+        unnamedArgs: [{
+            name: 'list',
+            description: 'variable name or array',
+            defaultValue: '[]',
+            optional: false,
+            type: macros.valueType.STRING,
+        }, {
+            name: 'glue',
+            description: 'text used to glue list items together',
+            defaultValue: ', ',
+            optional: true,
+            type: macros.valueType.STRING,
+        }],
+        handler({args: [list, glue]}) {
+            log('getglobalvarindexes', {list, glue});
+
+            if (!list?.length) return '';
+
+            /** @type {any[]} */
+            let array;
+
+            try {
+                array = localVariables.get(list) || globalVariables.get(list) || list;
+                array = typeof array === 'string' ? JSON.parse(array) : array;
+                array = Array.isArray(array) ? array : [];
+            } catch (err) {
+                error('Error parsing an array', err);
+                return '';
+            }
+
+            if (!array?.length) return '';
+
+            try {
+                return array.join(glue || ', ');
+            } catch (err) {
+                error('Error joining array', err);
                 return '';
             }
         }
