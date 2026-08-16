@@ -3,6 +3,7 @@ import { newWorldInfoEntryDefinition, newWorldInfoEntryTemplate, world_info_logi
 import { enumTypes, SlashCommandEnumValue } from "../../../slash-commands/SlashCommandEnumValue.js";
 import { SlashCommandClosure } from "../../../slash-commands/SlashCommandClosure.js";
 import { SlashCommandExecutor } from "../../../slash-commands/SlashCommandExecutor.js";
+import { SlashCommandBreakController } from "/scripts/slash-commands/SlashCommandBreakController.js";
 
 import { natsort } from "./public/bundle.min.js";
 
@@ -11,6 +12,7 @@ import { natsort } from "./public/bundle.min.js";
 /** @typedef {KofeScript.WIEntry} WIEntry */
 /** @typedef {KofeScript.NamedArguments} NamedArguments */
 /** @typedef {KofeScript.NamedArgumentsCapture} NamedArgumentsCapture */
+/** @typedef {KofeScript.NamedArgumentAssignment} NamedArgumentAssignment */
 
 // * MARK:Extension variables
 
@@ -380,54 +382,84 @@ async function getRawEntryField(args, uid) {
 /**
  * @param {NamedArguments} args
  * @param {string} target
- * @param {object} options
- * @param {string} [options.operation]
- * @returns {string}
+ * @returns {{get: Function; set: Function;}}
  */
-function arrayManipulationCommand(args, target, {operation = 'pop'}) {
+function findGetSetForCommandScope(args, target) {
     let get, set;
 
+    if (args._scope.existsVariable(target)) {
+        get = () => args._scope.getVariable(target);
+        set = (value) => args._scope.setVariable(target, JSON.stringify(value));
+    } else if (localVariables.has(target)) {
+        get = () => localVariables.get(target);
+        set = (value) => {
+            localVariables.set(target, value);
+            saveChat();
+        };
+    } else if (globalVariables.has(target)) {
+        get = () => globalVariables.get(target);
+        set = (value) => {
+            globalVariables.set(target, value);
+            saveSettingsDebounced();
+        };
+    } else {
+        get = () => target;
+        set = () => {};
+    }
+
+    return {get, set};
+}
+
+/**
+ * @param {NamedArguments} args
+ * @param {string} target
+ * @returns {any[]}
+ */
+function findArrayFromScope(args, target) {
+    const { get } = findGetSetForCommandScope(args, target);
+    const list = get();
+    const listType = typeof list;
+    const validValue = getIndexValidTypes.includes(listType);
+
+    if (!validValue) return [];
+
+    log({list, listType})
+
+    const value = listType === 'string' ?
+        JSON.parse(escapeNewlines(list)) :
+        Array.from(list ?? []);
+    log({value})
+
+    const isList = Array.isArray(value);
+
+    return isList ? value : [];
+}
+
+/**
+ * @param {NamedArguments} args
+ * @param {string|string[]} target
+ * @param {object} options
+ * @param {string} [options.operation]
+ * @param {boolean} [options.returnList]
+ * @returns {string}
+ */
+function arrayManipulationCommand(args, [target, ...items], {operation = 'pop', returnList = false}) {
     try {
-        if (args._scope.existsVariable(target)) {
-            get = () => args._scope.getVariable(target);
-            set = () => args._scope.setVariable(target, JSON.stringify(list));
-        } else if (localVariables.has(target)) {
-            get = () => localVariables.get(target);
-            set = (list) => {
-                localVariables.set(target, list);
-                saveChat();
-            };
-        } else if (globalVariables.has(target)) {
-            get = () => globalVariables.get(target);
-            set = (list) => {
-                globalVariables.set(target, list);
-                saveSettingsDebounced();
-            };
-        } else {
-            get = () => target;
-            set = () => {};
-        }
+        const { set } = findGetSetForCommandScope(args, target);
+        const parsedList = findArrayFromScope(args, target);
 
-        const list = get();
-        const listType = typeof list;
-        const validValue = getIndexValidTypes.includes(listType);
+        const value = operation === 'push' ?
+            parsedList[operation](...items) :
+            parsedList[operation]();
 
-        if (!validValue) return '';
+        const result = returnList ? parsedList : value;
+        set(parsedList);
 
-        const rawValue = listType === 'string' ? JSON.parse(list) : Array.from(list ?? []);
-        const isList = Array.isArray(rawValue);
-        let value = '';
+        if (typeof result == 'string') return result;
 
-        if (isList) {
-            value = rawValue[operation]();
-            set(rawValue);
-        }
-
-        if (typeof value == 'string') return value;
-
-        return JSON.stringify(value);
+        return JSON.stringify(result);
     } catch (err) {
-        error({err, get, set});
+        error({err});
         return '';
     }
 }
@@ -648,7 +680,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
      * @param {string} target
      * @returns {string}
      */
-    callback: (args, target) => arrayManipulationCommand(args, target, {operation: 'shift'}),
+    callback: (args, target) => arrayManipulationCommand(args, [target], {operation: 'shift'}),
     unnamedArgumentList: [
         SlashCommandArgument.fromProps({
             description: 'target list',
@@ -687,7 +719,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
      * @param {string} target
      * @returns {string}
      */
-    callback: (args, target) => arrayManipulationCommand(args, target, {operation: 'pop'}),
+    callback: (args, target) => arrayManipulationCommand(args, [target], {operation: 'pop'}),
     unnamedArgumentList: [
         SlashCommandArgument.fromProps({
             description: 'target list',
@@ -719,11 +751,141 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     `,
 }));
 
-// * MARK:Macros Registration
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+    name: 'push',
+    /**
+     * @param {NamedArguments} args
+     * @param {string} target
+     * @returns {string}
+     */
+    callback: (args, target) => arrayManipulationCommand(args, target, {operation: 'push', returnList: true}),
+    splitUnnamedArgument: true,
+    unnamedArgumentList: [
+        SlashCommandArgument.fromProps({
+            description: 'target list',
+            isRequired: true,
+            typeList: [
+                ARGUMENT_TYPE.VARIABLE_NAME,
+                ARGUMENT_TYPE.LIST
+            ],
+        }),
+        SlashCommandArgument.fromProps({
+            description: 'items to add',
+            isRequired: true,
+            acceptsMultiple: true,
+            typeList: [
+                ARGUMENT_TYPE.BOOLEAN,
+                ARGUMENT_TYPE.DICTIONARY,
+                ARGUMENT_TYPE.LIST,
+                ARGUMENT_TYPE.NUMBER,
+                ARGUMENT_TYPE.STRING
+            ],
+        }),
+    ],
+    returns: 'The updated list',
+    helpString: `
+        <div>
+            Adds an element to a list and returns the updated list.
+        </div>
+        <div>
+            <strong>Example:</strong>
+            <ul>
+                <li>
+                    <pre><code>/let myList [1, 2, 3, 4, 5] | /push myList 6</code></pre>
+                    <small>Returns: <code>[1, 2, 3, 4, 5, 6]</code></small>
+                </li>
+            </ul>
+        </div>
+    `,
+}));
 
-function escapeRegExp(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+    name: 'array-some',
+    /**
+     * @param {NamedArguments} args
+     * @param {SlashCommandClosure} closure
+     * @returns {Promise<'true'|'false'>}
+     */
+    async callback(args, closure) {
+        if (!closure || !args.array) return 'false';
+
+        const isClosure = closure instanceof SlashCommandClosure;
+        if (!isClosure) return 'false';
+
+        try {
+            const { array } = args;
+            const parsedList = findArrayFromScope(args, String(array));
+            const names = ['item', 'index'];
+            let result;
+
+            if (closure.argumentList.length >= 1) {
+                names[0] = closure.argumentList[0]?.name ?? names[0];
+                names[1] = closure.argumentList[1]?.name ?? names[1];
+            }
+
+            for (const [idx, item] of parsedList.entries()) {
+                const value = typeof item === 'string' ? item : JSON.stringify(item);
+                closure.scope.setMacro('item', value, true);
+                closure.scope.setMacro('index', idx, true);
+                closure.argumentList = [
+                    /** @type {NamedArgumentAssignment} */({name: names[0], value: item}),
+                    /** @type {NamedArgumentAssignment} */({name: names[1], value: item}),
+                ];
+
+                closure.breakController = new SlashCommandBreakController();
+
+                result = await closure.execute();
+
+                if (result.isAborted) break;
+                if (result.isBreak) break;
+                if (isTrueBoolean(result.pipe)) break;
+            }
+
+            return isTrueBoolean(result?.pipe) ? 'true' : 'false';
+        } catch (err) {
+            error({err});
+            return 'false';
+        }
+    },
+    returns: 'true or false',
+    namedArgumentList: [
+        SlashCommandNamedArgument.fromProps({
+            name: 'array',
+            description: 'The list you want to run a test over',
+            typeList: [
+                ARGUMENT_TYPE.LIST,
+                ARGUMENT_TYPE.VARIABLE_NAME,
+            ],
+            defaultValue: JSON.stringify([]),
+            isRequired: true,
+            enumProvider: commonEnumProviders.variables('all'),
+        }),
+    ],
+    unnamedArgumentList: [
+        SlashCommandArgument.fromProps({
+            description: 'Operation that you will perform over the array.',
+            typeList: [ARGUMENT_TYPE.CLOSURE],
+            defaultValue: '',
+            isRequired: true,
+        }),
+    ],
+    helpString: `
+        <div>
+            Sorts the items from an array using a natural sorting method. Normal sorting would put <code>"Text 10"</code> before <code>"Text 8"</code>, natural sorting places <code>"Text 8"</code> before <code>"Text 10"</code>.
+        </div>
+        <div>
+            <strong>Example:</strong>
+            <ul>
+                <li>
+                    <pre><code>/natsort ["Text 1", "Text 8", "Text 70", "Text 8008", "Text 10"]</code></pre>
+                    <small>Returns: <code>["Text 1", "Text 8", "Text 10", "Text 70", "Text 8008"]</code></small>
+                </li>
+            </ul>
+        </div>
+    `,
+}));
+
+// * MARK:Macros Registration
 
 function registerMacros() {
     const hasEngine = 'macros' in context();

@@ -1,6 +1,12 @@
 declare namespace KofeScript {
-    type NamedArguments = import('../../../slash-commands/SlashCommand.js').NamedArguments;
-    type NamedArgumentsCapture = import('../../../slash-commands/SlashCommand.js').NamedArgumentsCapture;
+    type NamedArguments = import('/scripts/slash-commands/SlashCommand.js').NamedArguments;
+    type NamedArgumentsCapture = import('/scripts/slash-commands/SlashCommand.js').NamedArgumentsCapture;
+    type SlashCommandNamedArgumentAssignment = import('/scripts/slash-commands/SlashCommandNamedArgumentAssignment.js').SlashCommandNamedArgumentAssignment;
+
+    type NamedArgumentAssignment = SlashCommandNamedArgumentAssignment & {
+        start?: 0;
+        end?: 0;
+    }
 
     type WIEntry = {
         uid: number;
