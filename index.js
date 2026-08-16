@@ -176,7 +176,7 @@ const HTML_TEMPLATES = {
  */
 const log = function (...msg) {
     if (!extensionSettings.enabled || !extensionSettings.debug) return;
-    console.log("[" + extensionName + "]", ...msg);
+    console.log(`[${extensionName}]`, ...msg);
 };
 
 /**
@@ -185,7 +185,7 @@ const log = function (...msg) {
  */
 const debug = function (...msg) {
     if (!extensionSettings.enabled || !extensionSettings.debug) return;
-    console.debug("[" + extensionName + "]", ...msg);
+    console.debug(`[${extensionName}]`, ...msg);
 };
 
 /**
@@ -194,7 +194,7 @@ const debug = function (...msg) {
  */
 const warn = function (...msg) {
     if (!extensionSettings.enabled || !extensionSettings.debug) return;
-    console.warn("[" + extensionName + "]", ...msg);
+    console.warn(`[${extensionName}]`, ...msg);
 };
 
 /**
@@ -203,7 +203,7 @@ const warn = function (...msg) {
  */
 const error = function (...msg) {
     if (!extensionSettings.enabled || !extensionSettings.debug) return;
-    console.error("[" + extensionName + "]", ...msg);
+    console.error(`[${extensionName}]`, ...msg);
 };
 
 // * MARK:Extension methods
@@ -1001,9 +1001,29 @@ function registerMacros() {
             text = resolve(text || '');
 
             const sorter = natsort();
-            const parsedSeparator = un_escapeNewlines(separator);
-            const parsedGlue = un_escapeNewlines(glue);
-            const textLines = text.split(parsedSeparator);
+            const parsedSeparator = unEscapeNewlines(separator);
+            const parsedGlue = unEscapeNewlines(glue);
+
+            /** @type {RegExp|string} */
+            let finalSeparator;
+
+            try {
+                if (!isLikelyRegex(parsedSeparator))
+                    throw new Error('Separator is not valid regex');
+
+                const regex = parsedSeparator.match(/(?<=^\/).*(?=\/[a-z]*$)/s)?.at(0);
+                const flags = parsedSeparator.match(/(?<=^\/.*\/)[a-z]*$/s)?.at(0);
+
+                log('sorttext macro:', {regex, flags});
+
+                finalSeparator = new RegExp(regex, flags);
+            } catch (e) {
+                debug('[Error]', parsedSeparator, e);
+
+                finalSeparator = parsedSeparator;
+            }
+
+            const textLines = text.split(finalSeparator);
 
             if (!textLines.length) return '';
 
@@ -1016,7 +1036,7 @@ function registerMacros() {
                 .sort((a,b) => sorter(a,b))
                 .join(parsedGlue);
 
-            log("sorttext macro:", {text, parsedSeparator, parsedGlue, textLines, joined});
+            log('sorttext macro:', {text, finalSeparator, parsedSeparator, parsedGlue, textLines, joined});
 
             if (extensionSettings.macros.collapse_multiple_newlines)
                 return joined.replaceAll(/(\r?\n){2,}/g, '\n');
