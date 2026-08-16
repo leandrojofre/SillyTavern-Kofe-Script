@@ -73,6 +73,27 @@ const defaultSettings = {
     debug: false
 };
 
+const ifOerations = {
+    not: (left) => !left,
+    eq: (left, right) => left === right,
+    neq: (left, right) => left !== right,
+    gt: (left, right) => left > right,
+    gte: (left, right) => left >= right,
+    lt: (left, right) => left < right,
+    lte: (left, right) => left <= right,
+    in: (left, right) => left?.includes && left.includes(right),
+    nin: (left, right) => left?.includes && !left.includes(right),
+    ovlp: (left, right) => {
+        left = typeof left === 'string' && left.includes(',') ? left.split(/,( )*/) : left;
+        right = typeof right === 'string' && right.includes(',') ? right.split(/,( )*/) : right;
+
+        if (!Array.isArray(left) || !Array.isArray(right))
+            return false;
+
+        return left.some(it => right.includes(it));
+    },
+};
+
 const localEnumProviders = {
     /** All possible fields that can be set in a WI entry */
     wiEntryFields: () => Object.entries(newWorldInfoEntryDefinition).map(([key, value]) =>
@@ -191,11 +212,36 @@ const error = function (...msg) {
  * @param {string} str
  * @returns {string}
  */
-export function un_escapeNewlines(str = '') {
+function escapeNewlines(str) {
     return str
-        .replaceAll(/\\n/g, "\n")
-        .replaceAll(/\\r/g, "\r")
-        .replaceAll(/\\t/g, "\t");
+        .replace(/\r\n/g, '\\r\\n')
+        .replace(/\t/g, '\\t')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r');
+}
+
+/**
+ * @param {string} str
+ * @returns {string}
+ */
+function unEscapeNewlines(str) {
+    return str
+        .replace(/\\r\\n/g, '\r\n')
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\t/g, '\t')
+        .replaceAll('<br>', '\n');
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+function isLikelyRegex(text) {
+    const startsWith = /^\//;
+    const endsWith = /\/[a-z]*$/;
+
+    return startsWith.test(text) && endsWith.test(text);
 }
 
 function getWiPositionString(entry) {
@@ -461,6 +507,33 @@ function arrayManipulationCommand(args, [target, ...items], {operation = 'pop', 
     } catch (err) {
         error({err});
         return '';
+    }
+}
+
+
+/**
+ * @param {string} value
+ * @returns {any}
+ */
+function parseRawValues(value) {
+    /** @type {any} */
+    let parsed;
+
+    try {
+        parsed = JSON.parse(value);
+    } catch (error) {
+        parsed = value;
+
+        if (parsed === 'true') parsed = true;
+        if (parsed === 'false') parsed = false;
+        if (parsed === 'null') parsed = null;
+        if (parsed === 'undefined') parsed = undefined;
+
+        const number = Number(parsed);
+
+        if (!isNaN(number) && /\d/.test(parsed)) parsed = number;
+    } finally {
+        return parsed;
     }
 }
 
@@ -1057,7 +1130,7 @@ function registerMacros() {
         }
     });
 
-    macros.register('joinlist', {
+    macros.register('arrayjoin', {
         category: macros.category.UTILITY,
         returnType: macros.valueType.STRING,
         description: 'It will merge a list into a string, using the input text as glue.',
@@ -1101,6 +1174,45 @@ function registerMacros() {
             }
         }
     });
+
+    macros.register('condition', {
+        category: macros.category.UTILITY,
+        description: 'Allows to perform a boolean operation based off the given parameters. The rule operations are the same as the /if command. Extra comparison rules are:\n- ovlp: Checks if two arrays overlap, sharing a value. It accepts comma separated lists.',
+        returnType: macros.valueType.BOOLEAN,
+        unnamedArgs: [{
+            name: 'left',
+            description: 'The main value to compare against',
+            optional: false,
+            type: [
+                macros.valueType.BOOLEAN,
+                macros.valueType.INTEGER,
+                macros.valueType.NUMBER,
+                macros.valueType.STRING,
+            ],
+        }, {
+            name: 'rule',
+            description: 'Operation to perform against the main value',
+            optional: false,
+            type: macros.valueType.STRING,
+        }, {
+            name: 'right',
+            description: 'Value to compare against the main value - Only optional if rule is not',
+            optional: true,
+            type: [
+                macros.valueType.BOOLEAN,
+                macros.valueType.INTEGER,
+                macros.valueType.NUMBER,
+                macros.valueType.STRING,
+            ],
+        }],
+        handler({args: [left, rule, right]}) {
+            left = parseRawValues(left);
+            right = parseRawValues(right);
+            rule = rule.toLowerCase();
+
+            return String(ifOerations[rule] ? ifOerations[rule](left, right) : false);
+        },
+    })
 }
 
 // * MARK:Settings Controls
