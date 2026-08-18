@@ -944,14 +944,22 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     ],
     helpString: `
         <div>
-            Sorts the items from an array using a natural sorting method. Normal sorting would put <code>"Text 10"</code> before <code>"Text 8"</code>, natural sorting places <code>"Text 8"</code> before <code>"Text 10"</code>.
+            It runs a test over the provided array, returning <code>true</code> or <code>false</code> depending on wheter the array passes the test or not. Your test must return <code>true</code> or <code>false</code> on the pipe, otherwise it will return <code>false</code>.
         </div>
         <div>
             <strong>Example:</strong>
             <ul>
                 <li>
-                    <pre><code>/natsort ["Text 1", "Text 8", "Text 70", "Text 8008", "Text 10"]</code></pre>
-                    <small>Returns: <code>["Text 1", "Text 8", "Text 10", "Text 70", "Text 8008"]</code></small>
+                    <pre><code>/array-some ["Text 1", "Text 2"] {: /tag-exists {{var::item}} :}</code></pre>
+                    <small>Returns: <code>true</code> if tag with the name exists</small>
+                </li>
+                <li>
+                    <pre><code>/setvar key=myTagList ["Text 1", "Text 2"] | /array-some myTagList {: /tag-exists {{var::item}} :}</code></pre>
+                    <small>Returns: <code>true</code> if tag with the name exists</small>
+                </li>
+                <li>
+                    <pre><code>/array-some ["Text 1", "Text 2"] {: tag= /tag-exists {{var::tag}} :}</code></pre>
+                    <small>Returns: <code>true</code> if tag with the name exists</small>
                 </li>
             </ul>
         </div>
