@@ -22,7 +22,7 @@ This is a simple extension that adds a bunch of random commands needed by me for
   - `/push`
 
 ## Installation
-Install the extension using this link: ```https://github.com/leandrojofre/SillyTavern-Kofe-Script.git```
+Install the extension using this link with the `Instal Extension` button: ```https://github.com/leandrojofre/SillyTavern-Kofe-Script.git```
 
 ### Usage
-This extension is requires Quick Replies to be enabled in ST's extension settings, inside `manage extensions`.
+This extension requires Quick Replies to be enabled in ST's extension settings, inside `manage extensions`.
