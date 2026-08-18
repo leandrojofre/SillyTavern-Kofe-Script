@@ -3,12 +3,16 @@ import { newWorldInfoEntryDefinition, newWorldInfoEntryTemplate, world_info_logi
 import { enumTypes, SlashCommandEnumValue } from "../../../slash-commands/SlashCommandEnumValue.js";
 import { SlashCommandClosure } from "../../../slash-commands/SlashCommandClosure.js";
 import { SlashCommandExecutor } from "../../../slash-commands/SlashCommandExecutor.js";
-import { MacroValueType } from "../../../macros/macro-system.js";
+import { SlashCommandBreakController } from "/scripts/slash-commands/SlashCommandBreakController.js";
 
 import { natsort } from "./public/bundle.min.js";
 
 /** @typedef {KofeScript.ExtensionSettings} ExtensionSettings */
 /** @typedef {KofeScript.HTMLTemplateGetOptions} HTMLTemplateGetOptions */
+/** @typedef {KofeScript.WIEntry} WIEntry */
+/** @typedef {KofeScript.NamedArguments} NamedArguments */
+/** @typedef {KofeScript.NamedArgumentsCapture} NamedArgumentsCapture */
+/** @typedef {KofeScript.NamedArgumentAssignment} NamedArgumentAssignment */
 
 // * MARK:Extension variables
 
@@ -22,6 +26,7 @@ const {
     powerUserSettings,
     eventTypes,
     eventSource,
+    saveChat,
     loadWorldInfo,
     t,
     SlashCommandArgument,
@@ -46,6 +51,14 @@ const metadataName = extensionName.toLowerCase().replaceAll('-', '_');
 const htmlSuffix = extensionName.toLowerCase();
 const extensionFolderPath = `scripts/extensions/third-party/${extensionFullName}`;
 
+/**
+ * @enum {['string', 'object']}
+ */
+const getIndexValidTypes = [
+    'string',
+    'object'
+]
+
 /** @type {ExtensionSettings} */
 const extensionSettings = extension_settings[extensionFullName];
 
@@ -58,6 +71,27 @@ const defaultSettings = {
         collapse_multiple_newlines: false
     },
     debug: false
+};
+
+const ifOerations = {
+    not: (left) => !left,
+    eq: (left, right) => left === right,
+    neq: (left, right) => left !== right,
+    gt: (left, right) => left > right,
+    gte: (left, right) => left >= right,
+    lt: (left, right) => left < right,
+    lte: (left, right) => left <= right,
+    in: (left, right) => left?.includes && left.includes(right),
+    nin: (left, right) => left?.includes && !left.includes(right),
+    ovlp: (left, right) => {
+        left = typeof left === 'string' && left.includes(',') ? left.split(/,( )*/) : left;
+        right = typeof right === 'string' && right.includes(',') ? right.split(/,( )*/) : right;
+
+        if (!Array.isArray(left) || !Array.isArray(right))
+            return false;
+
+        return left.some(it => right.includes(it));
+    },
 };
 
 const localEnumProviders = {
@@ -142,7 +176,7 @@ const HTML_TEMPLATES = {
  */
 const log = function (...msg) {
     if (!extensionSettings.enabled || !extensionSettings.debug) return;
-    console.log("[" + extensionName + "]", ...msg);
+    console.log(`[${extensionName}]`, ...msg);
 };
 
 /**
@@ -151,7 +185,7 @@ const log = function (...msg) {
  */
 const debug = function (...msg) {
     if (!extensionSettings.enabled || !extensionSettings.debug) return;
-    console.debug("[" + extensionName + "]", ...msg);
+    console.debug(`[${extensionName}]`, ...msg);
 };
 
 /**
@@ -160,7 +194,7 @@ const debug = function (...msg) {
  */
 const warn = function (...msg) {
     if (!extensionSettings.enabled || !extensionSettings.debug) return;
-    console.warn("[" + extensionName + "]", ...msg);
+    console.warn(`[${extensionName}]`, ...msg);
 };
 
 /**
@@ -169,7 +203,7 @@ const warn = function (...msg) {
  */
 const error = function (...msg) {
     if (!extensionSettings.enabled || !extensionSettings.debug) return;
-    console.error("[" + extensionName + "]", ...msg);
+    console.error(`[${extensionName}]`, ...msg);
 };
 
 // * MARK:Extension methods
@@ -178,11 +212,36 @@ const error = function (...msg) {
  * @param {string} str
  * @returns {string}
  */
-export function un_escapeNewlines(str = '') {
+function escapeNewlines(str) {
     return str
-        .replaceAll(/\\n/g, "\n")
-        .replaceAll(/\\r/g, "\r")
-        .replaceAll(/\\t/g, "\t");
+        .replace(/\r\n/g, '\\r\\n')
+        .replace(/\t/g, '\\t')
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r');
+}
+
+/**
+ * @param {string} str
+ * @returns {string}
+ */
+function unEscapeNewlines(str) {
+    return str
+        .replace(/\\r\\n/g, '\r\n')
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\t/g, '\t')
+        .replaceAll('<br>', '\n');
+}
+
+/**
+ * @param {string} text
+ * @returns {boolean}
+ */
+function isLikelyRegex(text) {
+    const startsWith = /^\//;
+    const endsWith = /\/[a-z]*$/;
+
+    return startsWith.test(text) && endsWith.test(text);
 }
 
 function getWiPositionString(entry) {
@@ -203,22 +262,19 @@ function getWiPositionString(entry) {
     @param {Array} names - Optional array of titles for the warning message
     @returns {boolean}
 */
-function checkStrings(params, names=[]) {
+function checkStrings(params, names = []) {
     let valid = true;
 
     for (let i = 0; i < params.length; i++) {
         const string = params[i];
-        const name = names[i] ?? "An argument";
+        const name = names[i] ?? 'An argument';
 
         if (!isNaN(Number(string))) {
             continue;
         }
 
-        // @ts-ignore
         if (!String(string).trim() || !string) {
-
-            // @ts-ignore
-            if (extensionSettings.show_warnings) toastr.warning(t`${name} is empty`);
+            if (extensionSettings.show_warnings) toastr.warning(t`${name} is empty`, extensionName);
 
             valid = false;
             break;
@@ -230,60 +286,96 @@ function checkStrings(params, names=[]) {
 
 /** Get a world info entries
     @param {String} file - Name of the lorebook
-    @returns {Promise<String|Object>}
+    @returns {Promise<WIEntry[]>}
 */
 async function getEntriesFromFile(file) {
     if (!file || !world_names.includes(file)) {
         // @ts-ignore
-        if (extensionSettings.show_warnings) toastr.warning(t`Valid World Info file name is required`);
-        return '';
+        if (extensionSettings.show_warnings) toastr.warning(t`Valid World Info file name is required`, extensionName);
+        return [];
     }
 
     const data = await loadWorldInfo(file);
 
     if (!data || !('entries' in data)) {
         // @ts-ignore
-        if (extensionSettings.show_warnings) toastr.warning(t`World Info file has an invalid format`);
-        return '';
+        if (extensionSettings.show_warnings) toastr.warning(t`World Info file has an invalid format`, extensionName);
+        return [];
     }
 
     const entries = Object.values(data.entries);
 
     if (!entries || entries.length === 0) {
         // @ts-ignore
-        if (extensionSettings.show_warnings) toastr.warning(t`World Info file has no entries`);
-        return '';
+        if (extensionSettings.show_warnings) toastr.warning(t`World Info file has no entries`, extensionName);
+        return [];
     }
 
     return entries;
 }
 
+/**
+ * Checks if a string is "true" value.
+ * @param {string} arg String to check
+ * @returns {boolean} True if the string is true, false otherwise.
+ */
+function isTrueBoolean(arg) {
+    return ['on', 'true', '1'].includes(arg?.trim()?.toLowerCase());
+}
+
+/**
+ * @param {string} search
+ * @param {object} [options]
+ * @param {boolean} [options.allowAvatar]
+ * @return {Character}
+ */
+function findCharacter(search, {allowAvatar = true} = {}) {
+    const {characters, groupId, groups} = context();
+    const group = groupId ? groups.find(g => g.id === groupId) : null;
+    const members = group ? characters.filter(c => group.members.includes(c.avatar)) : [];
+    let character;
+
+    search = String(search).trim();
+
+    if (allowAvatar) character = members.find(m => m.avatar === search);
+    if (allowAvatar && !character) character = characters.find(c => c.avatar === search);
+
+    if (!character) character = members.find(m => m.name === search);
+    if (!character) character = characters.find(c => c.name === search);
+
+    return character;
+}
+
 /** Get the UID of world info entry
     @param {Object} args - Lorebook name and entry field to match
-    @param {String} value - Value to match against args
-    @returns {Promise<String>} UID of the found lorebook entry
+    @param {string} unnamed - Value to match against args
+    @returns {Promise<string>} UID of the found lorebook entry
 */
-async function getEntryUid(args, value) {
-    const file = args.file;
-    const field = args.field;
-
+async function getEntryUid(args, unnamed = '') {
+    let {file = '', field = 'content', includes = 'false', value = ''} = args;
     const entries = await getEntriesFromFile(file);
 
-    if (!entries) return "";
+    if (!entries?.length) return '';
 
     if (newWorldInfoEntryTemplate[field] === undefined) {
-        // @ts-ignore
-        if (extensionSettings.show_warnings) toastr.warning(t`Valid field name is required`);
-        return "";
+        if (extensionSettings.show_warnings) toastr.warning(t`Valid field name is required`, extensionName);
+        return '';
     }
 
-    const macroedValue = substituteParams(value);
-    const target = [...entries].find(entry => substituteParams(String(entry[field])) === macroedValue);
+    includes = isTrueBoolean(includes);
+
+    log({args, unnamed, entries});
+
+    const macroedValue = substituteParams(unnamed || value || '');
+    const target = entries.find(entry => {
+        return includes ?
+            substituteParams(String(entry[field])).includes(macroedValue) :
+            substituteParams(String(entry[field])) === macroedValue
+    });
 
     if (!target) {
-        // @ts-ignore
-        if (extensionSettings.show_warnings) toastr.warning(t`No match found`);
-        return "";
+        if (extensionSettings.show_warnings) toastr.warning(t`No match found`, extensionName);
+        return '';
     }
 
     const uid = target.uid;
@@ -302,28 +394,28 @@ async function getRawEntryField(args, uid) {
 
     const entries = await getEntriesFromFile(file);
 
-    if (!entries) {
-        return "";
+    if (!entries?.length) {
+        return '';
     }
 
     const entry = entries.find(x => String(x.uid) === String(uid));
 
     if (!entry) {
         // @ts-ignore
-        if (extensionSettings.show_warnings) toastr.warning('Valid UID is required');
-        return "";
+        if (extensionSettings.show_warnings) toastr.warning('Valid UID is required', extensionName);
+        return '';
     }
 
     if (newWorldInfoEntryTemplate[field] === undefined) {
         // @ts-ignore
-        if (extensionSettings.show_warnings) toastr.warning('Valid field name is required');
-        return "";
+        if (extensionSettings.show_warnings) toastr.warning('Valid field name is required', extensionName);
+        return '';
     }
 
     const fieldValue = entry[field];
 
     if (fieldValue === undefined) {
-        return "";
+        return '';
     }
 
     if (Array.isArray(fieldValue)) {
@@ -333,16 +425,128 @@ async function getRawEntryField(args, uid) {
     return String(fieldValue);
 }
 
+/**
+ * @param {NamedArguments} args
+ * @param {string} target
+ * @returns {{get: Function; set: Function;}}
+ */
+function findGetSetForCommandScope(args, target) {
+    let get, set;
+
+    if (args._scope.existsVariable(target)) {
+        get = () => args._scope.getVariable(target);
+        set = (value) => args._scope.setVariable(target, JSON.stringify(value));
+    } else if (localVariables.has(target)) {
+        get = () => localVariables.get(target);
+        set = (value) => {
+            localVariables.set(target, value);
+            saveChat();
+        };
+    } else if (globalVariables.has(target)) {
+        get = () => globalVariables.get(target);
+        set = (value) => {
+            globalVariables.set(target, value);
+            saveSettingsDebounced();
+        };
+    } else {
+        get = () => target;
+        set = () => {};
+    }
+
+    return {get, set};
+}
+
+/**
+ * @param {NamedArguments} args
+ * @param {string} target
+ * @returns {any[]}
+ */
+function findArrayFromScope(args, target) {
+    const { get } = findGetSetForCommandScope(args, target);
+    const list = get();
+    const listType = typeof list;
+    const validValue = getIndexValidTypes.includes(listType);
+
+    if (!validValue) return [];
+
+    log({list, listType})
+
+    const value = listType === 'string' ?
+        JSON.parse(escapeNewlines(list)) :
+        Array.from(list ?? []);
+    log({value})
+
+    const isList = Array.isArray(value);
+
+    return isList ? value : [];
+}
+
+/**
+ * @param {NamedArguments} args
+ * @param {string|string[]} target
+ * @param {object} options
+ * @param {string} [options.operation]
+ * @param {boolean} [options.returnList]
+ * @returns {string}
+ */
+function arrayManipulationCommand(args, [target, ...items], {operation = 'pop', returnList = false}) {
+    try {
+        const { set } = findGetSetForCommandScope(args, target);
+        const parsedList = findArrayFromScope(args, target);
+
+        const value = operation === 'push' ?
+            parsedList[operation](...items) :
+            parsedList[operation]();
+
+        const result = returnList ? parsedList : value;
+        set(parsedList);
+
+        if (typeof result == 'string') return result;
+
+        return JSON.stringify(result);
+    } catch (err) {
+        error({err});
+        return '';
+    }
+}
+
+
+/**
+ * @param {string} value
+ * @returns {any}
+ */
+function parseRawValues(value) {
+    /** @type {any} */
+    let parsed;
+
+    try {
+        parsed = JSON.parse(value);
+    } catch (error) {
+        parsed = value;
+
+        if (parsed === 'true') parsed = true;
+        if (parsed === 'false') parsed = false;
+        if (parsed === 'null') parsed = null;
+        if (parsed === 'undefined') parsed = undefined;
+
+        const number = Number(parsed);
+
+        if (!isNaN(number) && /\d/.test(parsed)) parsed = number;
+    } finally {
+        return parsed;
+    }
+}
+
 // * MARK:Slash Commands
 
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-    name: 'getexactentryuid',
-    aliases: ['getentryuid'],
-    callback: async (args) => {
-        if (!checkStrings([args.file, args.field, args.value], ["File", "Field", "Value"]))
-            return "";
+    name: 'findentryexact',
+    aliases: ['getentryuid', 'getexactentryuid'],
+    callback: async (args, unnamed) => {
+        if (!checkStrings([args.file, args.field], ['File', 'Field']))
+            return '';
 
-        return await getEntryUid(args, String(args.value));
+        return await getEntryUid(args, String(unnamed || ''));
     },
     returns: 'entry uid',
     namedArgumentList: [
@@ -357,15 +561,31 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
             name: 'field',
             description: 'field to match',
             typeList: [ARGUMENT_TYPE.STRING],
-            isRequired: true,
+            defaultValue: 'content',
+            isRequired: false,
             enumList: localEnumProviders.wiEntryFields()
         }),
         SlashCommandNamedArgument.fromProps({
+            name: 'includes',
+            description: 'instead of matching if the field and value are a one to one match, checks if the field includes the value',
+            typeList: [ARGUMENT_TYPE.BOOLEAN],
+            defaultValue: 'false',
+            isRequired: false,
+            enumProvider: commonEnumProviders.boolean(),
+        }),
+        SlashCommandNamedArgument.fromProps({
             name: 'value',
-            description: 'value to match against field - case sensitive',
+            description: 'value to match against field (deprecated argument - use unnamed argument instead)',
             typeList: [ARGUMENT_TYPE.STRING],
-            isRequired: true
+            isRequired: false
         })
+    ],
+    unnamedArgumentList: [
+        SlashCommandArgument.fromProps({
+            description: 'value to match against field (case sensitive)',
+            typeList: [ARGUMENT_TYPE.STRING],
+            isRequired: true,
+        }),
     ],
     helpString: `
         <div>
@@ -375,7 +595,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
             <strong>Example:</strong>
             <ul>
                 <li>
-                    <pre><code>/getexactentryuid file=chatLore field=comment value="title 1"</code></pre>
+                    <pre><code>/get-exact-entry-uid file=chatLore field=comment value="title 1"</code></pre>
                 </li>
             </ul>
         </div>
@@ -383,10 +603,11 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
 }));
 
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-    name: 'getrawentryfield',
+    name: 'get-raw-entry-field',
+    aliases: ['getrawentryfield'],
     callback: async (args, uid) => {
-        if (!checkStrings([args.file, args.field, uid], ["File", "Field", "UID"]))
-            return "";
+        if (!checkStrings([args.file, args.field, uid], ['File', 'Field', 'UID']))
+            return '';
 
         return await getRawEntryField(args, String(uid));
     },
@@ -423,7 +644,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
             <strong>Example:</strong>
             <ul>
                 <li>
-                    <pre><code>/getrawentryfield file=chatLore field=content 123</code></pre>
+                    <pre><code>/get-raw-entry-field file=chatLore field=content 123</code></pre>
                 </li>
             </ul>
         </div>
@@ -431,11 +652,12 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
 }));
 
 SlashCommandParser.addCommandObject(SlashCommand.fromProps({
-    name: 'newsetfromarray',
+    name: 'new-set-from-list',
+    aliases: ['newsetfromarray'],
     callback: function (namedArgs,/**@type {string} */ arrayInput) {
         if (!arrayInput) return JSON.stringify([]);
 
-        log("newsetfromarray input:", arrayInput);
+        log('new-set-from-list input:', arrayInput);
 
         try {
             const arrayItems = JSON.parse(arrayInput);
@@ -447,7 +669,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
 
             return JSON.stringify(uniqueItems);
         } catch (error) {
-            console.error(extensionName, "- newsetfromarray command error:", error);
+            console.error(extensionName, '- new-set-from-list command error:', error);
 
             return JSON.stringify([]);
         }
@@ -469,7 +691,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
             <strong>Example:</strong>
             <ul>
                 <li>
-                    <pre><code>/newsetfromarray [1, 2, 2, 3, 4, 4] => returns: [1, 2, 3, 4]</code></pre>
+                    <pre><code>/new-set-from-list [1, 2, 2, 3, 4, 4] => returns: [1, 2, 3, 4]</code></pre>
                 </li>
             </ul>
         </div>
@@ -481,7 +703,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     callback: function (namedArgs,/**@type {string} */ arrayInput) {
         if (!arrayInput) return JSON.stringify([]);
 
-        log("natsort input:", arrayInput);
+        log('natsort input:', arrayInput);
 
         try {
             const sorter = natsort();
@@ -494,7 +716,7 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
 
             return JSON.stringify(sortedArray);
         } catch (error) {
-            console.error(extensionName, "- natsort command error:", error);
+            console.error(extensionName, '- natsort command error:', error);
 
             return JSON.stringify([]);
         }
@@ -524,11 +746,219 @@ SlashCommandParser.addCommandObject(SlashCommand.fromProps({
     `,
 }));
 
-// * MARK:Macros Registration
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+    name: 'shift',
+    /**
+     * @param {NamedArguments} args
+     * @param {string} target
+     * @returns {string}
+     */
+    callback: (args, target) => arrayManipulationCommand(args, [target], {operation: 'shift'}),
+    unnamedArgumentList: [
+        SlashCommandArgument.fromProps({
+            description: 'target list',
+            isRequired: true,
+            typeList: [
+                ARGUMENT_TYPE.VARIABLE_NAME,
+                ARGUMENT_TYPE.LIST
+            ],
+        }),
+    ],
+    returns: 'The removed element',
+    helpString: `
+        <div>
+            Removes the first element from a list and returns it.
+        </div>
+        <div>
+            <strong>Example:</strong>
+            <ul>
+                <li>
+                    <pre><code>/shift ["A", "B", "C"]</code></pre>
+                    <small>Returns: <code>"A"</code></small>
+                </li>
+                <li>
+                    <pre><code>/let x [1, 2, 3, 4, 5] | /shift x</code></pre>
+                    <small>Returns: <code>1</code></small>
+                </li>
+            </ul>
+        </div>
+    `,
+}));
 
-function escapeRegExp(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+    name: 'pop',
+    /**
+     * @param {NamedArguments} args
+     * @param {string} target
+     * @returns {string}
+     */
+    callback: (args, target) => arrayManipulationCommand(args, [target], {operation: 'pop'}),
+    unnamedArgumentList: [
+        SlashCommandArgument.fromProps({
+            description: 'target list',
+            isRequired: true,
+            typeList: [
+                ARGUMENT_TYPE.VARIABLE_NAME,
+                ARGUMENT_TYPE.LIST
+            ],
+        }),
+    ],
+    returns: 'The removed element',
+    helpString: `
+        <div>
+            Removes the last element from a list and returns it.
+        </div>
+        <div>
+            <strong>Example:</strong>
+            <ul>
+                <li>
+                    <pre><code>/pop ["A", "B", "C"]</code></pre>
+                    <small>Returns: <code>"C"</code></small>
+                </li>
+                <li>
+                    <pre><code>/let x [1, 2, 3, 4, 5] | /pop x</code></pre>
+                    <small>Returns: <code>5</code></small>
+                </li>
+            </ul>
+        </div>
+    `,
+}));
+
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+    name: 'push',
+    /**
+     * @param {NamedArguments} args
+     * @param {string} target
+     * @returns {string}
+     */
+    callback: (args, target) => arrayManipulationCommand(args, target, {operation: 'push', returnList: true}),
+    splitUnnamedArgument: true,
+    unnamedArgumentList: [
+        SlashCommandArgument.fromProps({
+            description: 'target list',
+            isRequired: true,
+            typeList: [
+                ARGUMENT_TYPE.VARIABLE_NAME,
+                ARGUMENT_TYPE.LIST
+            ],
+        }),
+        SlashCommandArgument.fromProps({
+            description: 'items to add',
+            isRequired: true,
+            acceptsMultiple: true,
+            typeList: [
+                ARGUMENT_TYPE.BOOLEAN,
+                ARGUMENT_TYPE.DICTIONARY,
+                ARGUMENT_TYPE.LIST,
+                ARGUMENT_TYPE.NUMBER,
+                ARGUMENT_TYPE.STRING
+            ],
+        }),
+    ],
+    returns: 'The updated list',
+    helpString: `
+        <div>
+            Adds an element to a list and returns the updated list.
+        </div>
+        <div>
+            <strong>Example:</strong>
+            <ul>
+                <li>
+                    <pre><code>/let myList [1, 2, 3, 4, 5] | /push myList 6</code></pre>
+                    <small>Returns: <code>[1, 2, 3, 4, 5, 6]</code></small>
+                </li>
+            </ul>
+        </div>
+    `,
+}));
+
+SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+    name: 'array-some',
+    /**
+     * @param {NamedArguments} args
+     * @param {SlashCommandClosure} closure
+     * @returns {Promise<'true'|'false'>}
+     */
+    async callback(args, closure) {
+        if (!closure || !args.array) return 'false';
+
+        const isClosure = closure instanceof SlashCommandClosure;
+        if (!isClosure) return 'false';
+
+        try {
+            const { array } = args;
+            const parsedList = findArrayFromScope(args, String(array));
+            const names = ['item', 'index'];
+            let result;
+
+            if (closure.argumentList.length >= 1) {
+                names[0] = closure.argumentList[0]?.name ?? names[0];
+                names[1] = closure.argumentList[1]?.name ?? names[1];
+            }
+
+            for (const [idx, item] of parsedList.entries()) {
+                const value = typeof item === 'string' ? item : JSON.stringify(item);
+                closure.scope.setMacro('item', value, true);
+                closure.scope.setMacro('index', idx, true);
+                closure.argumentList = [
+                    /** @type {NamedArgumentAssignment} */({name: names[0], value: item}),
+                    /** @type {NamedArgumentAssignment} */({name: names[1], value: item}),
+                ];
+
+                closure.breakController = new SlashCommandBreakController();
+
+                result = await closure.execute();
+
+                if (result.isAborted) break;
+                if (result.isBreak) break;
+                if (isTrueBoolean(result.pipe)) break;
+            }
+
+            return isTrueBoolean(result?.pipe) ? 'true' : 'false';
+        } catch (err) {
+            error({err});
+            return 'false';
+        }
+    },
+    returns: 'true or false',
+    namedArgumentList: [
+        SlashCommandNamedArgument.fromProps({
+            name: 'array',
+            description: 'The list you want to run a test over',
+            typeList: [
+                ARGUMENT_TYPE.LIST,
+                ARGUMENT_TYPE.VARIABLE_NAME,
+            ],
+            defaultValue: JSON.stringify([]),
+            isRequired: true,
+            enumProvider: commonEnumProviders.variables('all'),
+        }),
+    ],
+    unnamedArgumentList: [
+        SlashCommandArgument.fromProps({
+            description: 'Operation that you will perform over the array.',
+            typeList: [ARGUMENT_TYPE.CLOSURE],
+            defaultValue: '',
+            isRequired: true,
+        }),
+    ],
+    helpString: `
+        <div>
+            Sorts the items from an array using a natural sorting method. Normal sorting would put <code>"Text 10"</code> before <code>"Text 8"</code>, natural sorting places <code>"Text 8"</code> before <code>"Text 10"</code>.
+        </div>
+        <div>
+            <strong>Example:</strong>
+            <ul>
+                <li>
+                    <pre><code>/natsort ["Text 1", "Text 8", "Text 70", "Text 8008", "Text 10"]</code></pre>
+                    <small>Returns: <code>["Text 1", "Text 8", "Text 10", "Text 70", "Text 8008"]</code></small>
+                </li>
+            </ul>
+        </div>
+    `,
+}));
+
+// * MARK:Macros Registration
 
 function registerMacros() {
     const hasEngine = 'macros' in context();
@@ -548,19 +978,19 @@ function registerMacros() {
 
     macros.register('sorttext', {
         category: macros.category.UTILITY,
-        returnType: MacroValueType.STRING,
+        returnType: macros.valueType.STRING,
         description: 'It breaks the input text into lines, sorts them alphabetically, and then joins them back together.',
         unnamedArgs: [{
             name: 'text',
-            type: MacroValueType.STRING,
+            type: macros.valueType.STRING,
             description: 'The text to sort.',
         }, {
             name: 'separator',
-            type: MacroValueType.STRING,
+            type: macros.valueType.STRING,
             description: 'The delimiter used to split lines.',
         }, {
             name: 'glue',
-            type: MacroValueType.STRING,
+            type: macros.valueType.STRING,
             description: 'Text used to join the sorted lines (default: \\n).',
             optional: true,
             defaultValue: '\\n',
@@ -571,9 +1001,29 @@ function registerMacros() {
             text = resolve(text || '');
 
             const sorter = natsort();
-            const parsedSeparator = un_escapeNewlines(separator);
-            const parsedGlue = un_escapeNewlines(glue);
-            const textLines = text.split(parsedSeparator);
+            const parsedSeparator = unEscapeNewlines(separator);
+            const parsedGlue = unEscapeNewlines(glue);
+
+            /** @type {RegExp|string} */
+            let finalSeparator;
+
+            try {
+                if (!isLikelyRegex(parsedSeparator))
+                    throw new Error('Separator is not valid regex');
+
+                const regex = parsedSeparator.match(/(?<=^\/).*(?=\/[a-z]*$)/s)?.at(0);
+                const flags = parsedSeparator.match(/(?<=^\/.*\/)[a-z]*$/s)?.at(0);
+
+                log('sorttext macro:', {regex, flags});
+
+                finalSeparator = new RegExp(regex, flags);
+            } catch (e) {
+                debug('[Error]', parsedSeparator, e);
+
+                finalSeparator = parsedSeparator;
+            }
+
+            const textLines = text.split(finalSeparator);
 
             if (!textLines.length) return '';
 
@@ -586,7 +1036,7 @@ function registerMacros() {
                 .sort((a,b) => sorter(a,b))
                 .join(parsedGlue);
 
-            log("sorttext macro:", {text, parsedSeparator, parsedGlue, textLines, joined});
+            log('sorttext macro:', {text, finalSeparator, parsedSeparator, parsedGlue, textLines, joined});
 
             if (extensionSettings.macros.collapse_multiple_newlines)
                 return joined.replaceAll(/(\r?\n){2,}/g, '\n');
@@ -594,37 +1044,91 @@ function registerMacros() {
         }
     });
 
-    macros.register('getvarindex', {
+    macros.register('getvarindexes', {
         category: macros.category.UTILITY,
         list: {
             min: 0
         },
         returnType: [
-            MacroValueType.STRING,
-            MacroValueType.NUMBER,
-            MacroValueType.INTEGER,
-            MacroValueType.BOOLEAN,
+            macros.valueType.STRING,
+            macros.valueType.NUMBER,
+            macros.valueType.INTEGER,
+            macros.valueType.BOOLEAN,
         ],
         description: 'Fetches the value of a local variable at a given index.',
         unnamedArgs: [{
             name: 'varname',
-            type: MacroValueType.STRING,
+            type: macros.valueType.STRING,
             description: 'The name of the variable.',
             optional: false,
         },{
             name: 'indexes',
-            type: MacroValueType.STRING,
+            type: macros.valueType.STRING,
             description: 'The index/es used to target a value of the variable.',
             optional: false,
         }],
         handler: function ({args: [text, ...indexes]}) {
-            log('getvarindex', {text, indexes: structuredClone(indexes)});
+            log('getvarindexes', {text, indexes: structuredClone(indexes)});
 
             if (!indexes?.length) return '';
 
             const rawVariable = localVariables.get(text);
+            const rawType = typeof rawVariable;
 
-            if (typeof rawVariable !== 'string') return '';
+            if (!rawVariable || !getIndexValidTypes.includes(rawType)) return '';
+
+            try {
+                const variable = rawType === 'string' ? JSON.parse(rawVariable) : rawVariable;
+
+                if (!variable || typeof variable !== 'object') return '';
+
+                let result = variable[indexes.shift()];
+
+                for (const index of indexes)
+                    result = result[index];
+
+                log('getvarindexes', {variable, result});
+
+                return String(result);
+            } catch (err) {
+                error({err, text, indexes});
+                return '';
+            }
+        }
+    });
+
+    macros.register('getglobalvarindexes', {
+        category: macros.category.UTILITY,
+        list: {
+            min: 0
+        },
+        returnType: [
+            macros.valueType.STRING,
+            macros.valueType.NUMBER,
+            macros.valueType.INTEGER,
+            macros.valueType.BOOLEAN,
+        ],
+        description: 'Fetches the value of a global variable at a given index.',
+        unnamedArgs: [{
+            name: 'varname',
+            type: macros.valueType.STRING,
+            description: 'The name of the variable.',
+            optional: false,
+        },{
+            name: 'indexes',
+            type: macros.valueType.STRING,
+            description: 'The index/es used to target a value of the global variable.',
+            optional: false,
+        }],
+        handler: function ({args: [text, ...indexes]}) {
+            log('getglobalvarindexes', {text, indexes: structuredClone(indexes)});
+
+            if (!indexes?.length) return '';
+
+            const rawVariable = globalVariables.get(text);
+            const rawType = typeof rawVariable;
+
+            if (!rawVariable || !getIndexValidTypes.includes(rawType)) return '';
 
             try {
                 const variable = JSON.parse(rawVariable);
@@ -636,7 +1140,7 @@ function registerMacros() {
                 for (const index of indexes)
                     result = result[index];
 
-                log('getvarindex', {variable, result});
+                log('getglobalvarindexes', {variable, result});
 
                 return String(result);
             } catch (err) {
@@ -645,6 +1149,90 @@ function registerMacros() {
             }
         }
     });
+
+    macros.register('arrayjoin', {
+        category: macros.category.UTILITY,
+        returnType: macros.valueType.STRING,
+        description: 'It will merge a list into a string, using the input text as glue.',
+        unnamedArgs: [{
+            name: 'list',
+            description: 'variable name or array',
+            defaultValue: '[]',
+            optional: false,
+            type: macros.valueType.STRING,
+        }, {
+            name: 'glue',
+            description: 'text used to glue list items together',
+            defaultValue: ', ',
+            optional: true,
+            type: macros.valueType.STRING,
+        }],
+        handler({args: [list, glue]}) {
+            log('getglobalvarindexes', {list, glue});
+
+            if (!list?.length) return '';
+
+            /** @type {any[]} */
+            let array;
+
+            try {
+                array = localVariables.get(list) || globalVariables.get(list) || list;
+                array = typeof array === 'string' ? JSON.parse(array) : array;
+                array = Array.isArray(array) ? array : [];
+            } catch (err) {
+                error('Error parsing an array', err);
+                return '';
+            }
+
+            if (!array?.length) return '';
+
+            try {
+                return array.join(glue || ', ');
+            } catch (err) {
+                error('Error joining array', err);
+                return '';
+            }
+        }
+    });
+
+    macros.register('condition', {
+        category: macros.category.UTILITY,
+        description: 'Allows to perform a boolean operation based off the given parameters. The rule operations are the same as the /if command. Extra comparison rules are:\n- ovlp: Checks if two arrays overlap, sharing a value. It accepts comma separated lists.',
+        returnType: macros.valueType.BOOLEAN,
+        unnamedArgs: [{
+            name: 'left',
+            description: 'The main value to compare against',
+            optional: false,
+            type: [
+                macros.valueType.BOOLEAN,
+                macros.valueType.INTEGER,
+                macros.valueType.NUMBER,
+                macros.valueType.STRING,
+            ],
+        }, {
+            name: 'rule',
+            description: 'Operation to perform against the main value',
+            optional: false,
+            type: macros.valueType.STRING,
+        }, {
+            name: 'right',
+            description: 'Value to compare against the main value - Only optional if rule is not',
+            optional: true,
+            type: [
+                macros.valueType.BOOLEAN,
+                macros.valueType.INTEGER,
+                macros.valueType.NUMBER,
+                macros.valueType.STRING,
+            ],
+        }],
+        handler({args: [left, rule, right]}) {
+            left = parseRawValues(left);
+            right = parseRawValues(right);
+            rule = rule.toLowerCase();
+
+            return String(ifOerations[rule] ? ifOerations[rule](left, right) : false);
+        },
+    })
 }
 
 // * MARK:Settings Controls
@@ -655,12 +1243,16 @@ const settingsCallbacks = {
         // Nothing by the moment
     },
 
+    experimental_macro_engine_first_run: true,
     experimental_macro_engine: () => {
+        if (settingsCallbacks.experimental_macro_engine_first_run)
+            return settingsCallbacks.experimental_macro_engine_first_run = false;
+
         if (extensionSettings.macros.experimental_macro_engine && !macroRegistered)
-            toastr.warning(t`Refresh the tab to use the new engine`);
+            toastr.warning(t`Refresh the tab to use the new engine`, extensionName);
 
         if (!extensionSettings.macros.experimental_macro_engine && macroRegistered)
-            toastr.warning(t`Refresh the tab to disable the experimental engine`);
+            toastr.warning(t`Refresh the tab to disable the experimental engine`, extensionName);
     }
 };
 
