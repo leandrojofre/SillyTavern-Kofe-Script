@@ -1224,7 +1224,7 @@ function registerMacros() {
 
     macros.register('condition', {
         category: macros.category.UTILITY,
-        description: 'Allows to perform a boolean operation based off the given parameters. The rule operations are the same as the /if command. Extra comparison rules are: ovlp (Checks if two arrays overlap, sharing a value) and test (Checks if regex at the left finds a match in text at right). It accepts comma separated lists.',
+        description: 'Allows to perform a boolean operation based off the given parameters. The rule operations are the same as the /if command. Extra comparison rules are: ovlp (Checks if two arrays overlap, sharing a value - It accepts comma separated lists) and test (Checks if regex at the left finds a match in text at right).',
         returnType: macros.valueType.BOOLEAN,
         unnamedArgs: [{
             name: 'left',
@@ -1256,7 +1256,7 @@ function registerMacros() {
             rule = rule.toLowerCase();
 
             if (rule in ifOperations !== true) {
-                return isTrueBoolean(left);
+                return String(isTrueBoolean(left));
             }
 
             left = parseRawValues(left);
