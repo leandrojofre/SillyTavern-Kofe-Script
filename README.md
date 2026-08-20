@@ -16,7 +16,7 @@ This is a simple extension that adds a bunch of random commands needed by me for
   - `{{arrayjoin::varname|array::glue}}` It will joing all the values inside the given array using the provided `glue`. If no `glue` is given, `, ` is used by default.
   - `{{condition::left::rule::right}}` It will perform a boolean operation. The `rule` operations are the same as the `/if` command. The macro adds two extra rules:
    - `ovlp` Checks if two arrays overlap, sharing a value - It accepts comma separated lists.
-   - `test` Checks if a regex (`left`) finds a match in text (`right`)
+   - `test` Checks if a regex (`left`) finds a match in text (`right`).
 
 - Fixes for [LaLib](https://github.com/LenAnderson/SillyTavern-LALib) commands
 > They override the commands from LaLib, fixing bugs like not being able to parse lists/objects, or not updating chat variables properly.
