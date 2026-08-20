@@ -73,7 +73,8 @@ const defaultSettings = {
     debug: false
 };
 
-const ifOerations = {
+/** @type {Record<string, (left: string, right: string) => boolean>} */
+const ifOperations = {
     not: (left) => !left,
     eq: (left, right) => left === right,
     neq: (left, right) => left !== right,
@@ -84,14 +85,25 @@ const ifOerations = {
     in: (left, right) => left?.includes && left.includes(right),
     nin: (left, right) => left?.includes && !left.includes(right),
     ovlp: (left, right) => {
-        left = typeof left === 'string' && left.includes(',') ? left.split(/,( )*/) : left;
-        right = typeof right === 'string' && right.includes(',') ? right.split(/,( )*/) : right;
+        const leftArray = typeof left === 'string' && left.includes(',') ? left.split(/,( )*/) : left;
+        const rightArray = typeof right === 'string' && right.includes(',') ? right.split(/,( )*/) : right;
 
-        if (!Array.isArray(left) || !Array.isArray(right))
+        if (!Array.isArray(leftArray) || !Array.isArray(rightArray))
             return false;
 
-        return left.some(it => right.includes(it));
+        return leftArray.some(it => rightArray.includes(it));
     },
+    test: (left, right) => {
+        const match = getMatchSource(left);
+
+        if (typeof match === 'string')
+            return ifOperations.in(right, match);
+
+        if (match instanceof RegExp)
+            return match.test(String(right));
+
+        return false;
+    }
 };
 
 const localEnumProviders = {
@@ -534,6 +546,30 @@ function parseRawValues(value) {
         if (!isNaN(number) && /\d/.test(parsed)) parsed = number;
     } finally {
         return parsed;
+    }
+}
+
+/**
+ * @param {string} text
+ * @returns {string|RegExp}
+ */
+function getMatchSource(text) {
+    text = String(text);
+
+    try {
+        if (!isLikelyRegex(text))
+            throw new Error(`(${text}) is not valid regex`);
+
+        const regex = text.match(/(?<=^\/).*(?=\/[a-z]*$)/s)?.at(0);
+        const flags = text.match(/(?<=^\/.*\/)[a-z]*$/s)?.at(0);
+
+        log('getMatchSource', {regex, flags});
+
+        return new RegExp(regex, flags);
+    } catch (e) {
+        debug('[Error]', text, e);
+
+        return text;
     }
 }
 
@@ -1013,24 +1049,7 @@ function registerMacros() {
             const parsedGlue = unEscapeNewlines(glue);
 
             /** @type {RegExp|string} */
-            let finalSeparator;
-
-            try {
-                if (!isLikelyRegex(parsedSeparator))
-                    throw new Error('Separator is not valid regex');
-
-                const regex = parsedSeparator.match(/(?<=^\/).*(?=\/[a-z]*$)/s)?.at(0);
-                const flags = parsedSeparator.match(/(?<=^\/.*\/)[a-z]*$/s)?.at(0);
-
-                log('sorttext macro:', {regex, flags});
-
-                finalSeparator = new RegExp(regex, flags);
-            } catch (e) {
-                debug('[Error]', parsedSeparator, e);
-
-                finalSeparator = parsedSeparator;
-            }
-
+            const finalSeparator = getMatchSource(parsedSeparator);
             const textLines = text.split(finalSeparator);
 
             if (!textLines.length) return '';
@@ -1205,7 +1224,7 @@ function registerMacros() {
 
     macros.register('condition', {
         category: macros.category.UTILITY,
-        description: 'Allows to perform a boolean operation based off the given parameters. The rule operations are the same as the /if command. Extra comparison rules are:\n- ovlp: Checks if two arrays overlap, sharing a value. It accepts comma separated lists.',
+        description: 'Allows to perform a boolean operation based off the given parameters. The rule operations are the same as the /if command. Extra comparison rules are: ovlp (Checks if two arrays overlap, sharing a value - It accepts comma separated lists) and test (Checks if regex at the left finds a match in text at right).',
         returnType: macros.valueType.BOOLEAN,
         unnamedArgs: [{
             name: 'left',
@@ -1220,7 +1239,7 @@ function registerMacros() {
         }, {
             name: 'rule',
             description: 'Operation to perform against the main value',
-            optional: false,
+            optional: true,
             type: macros.valueType.STRING,
         }, {
             name: 'right',
@@ -1233,12 +1252,17 @@ function registerMacros() {
                 macros.valueType.STRING,
             ],
         }],
-        handler({args: [left, rule, right]}) {
-            left = parseRawValues(left);
-            right = parseRawValues(right);
+        handler({args: [left, rule, right], rawOriginal}) {
             rule = rule.toLowerCase();
 
-            return String(ifOerations[rule] ? ifOerations[rule](left, right) : false);
+            if (rule in ifOperations !== true) {
+                return String(isTrueBoolean(left));
+            }
+
+            left = parseRawValues(left);
+            right = parseRawValues(right);
+
+            return String(ifOperations[rule](left, right) || false);
         },
     })
 }
