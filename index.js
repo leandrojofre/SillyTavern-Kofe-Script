@@ -1239,7 +1239,7 @@ function registerMacros() {
         }, {
             name: 'rule',
             description: 'Operation to perform against the main value',
-            optional: false,
+            optional: true,
             type: macros.valueType.STRING,
         }, {
             name: 'right',
@@ -1256,9 +1256,7 @@ function registerMacros() {
             rule = rule.toLowerCase();
 
             if (rule in ifOperations !== true) {
-                toastr.warning(t`Selected rule ${rule} does not exist. Triggered by ${rawOriginal}.`, extensionName);
-
-                return 'false';
+                return isTrueBoolean(left);
             }
 
             left = parseRawValues(left);
